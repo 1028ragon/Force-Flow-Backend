@@ -9,8 +9,15 @@ public interface UserRepository extends JpaRepository<User, Long> {
 
     List<User> findByUnitId(Long unitId);
 
+    List<User> findByUnitIdIn(List<Long> unitIds);
+
     List<User> findByUnitIdAndCurrentStatus(
             Long unitId,
+            String currentStatus
+    );
+
+    List<User> findByUnitIdInAndCurrentStatus(
+            List<Long> unitIds,
             String currentStatus
     );
 
@@ -22,5 +29,4 @@ public interface UserRepository extends JpaRepository<User, Long> {
             Long unitId,
             String currentStatus
     );
-
 }
