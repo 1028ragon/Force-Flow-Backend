@@ -22,8 +22,8 @@ import lombok.Getter;
 @Table(
         name = "duty_assignment",
         uniqueConstraints = @UniqueConstraint(
-                name = "uq_user_duty_date_type",
-                columnNames = {"user_id", "duty_date", "duty_type"}
+                name = "uq_user_duty_date_type_time",
+                columnNames = {"user_id", "duty_date", "duty_type", "start_time", "end_time"}
         )
 )
 public class DutyAssignment {
