@@ -8,39 +8,39 @@ import java.util.List;
 
 public interface DutyAssignmentRepository extends JpaRepository<DutyAssignment, Long> {
 
-    List<DutyAssignment> findByUserUserId(Long userId);
+    List<DutyAssignment> findByUserId(Long userId);
 
-    List<DutyAssignment> findByUnitUnitId(Long unitId);
+    List<DutyAssignment> findByUnitId(Long unitId);
 
-    List<DutyAssignment> findByRecommendationRecommendationId(
+    List<DutyAssignment> findByAiRecommendationId(
             Long recommendationId
     );
 
-    List<DutyAssignment> findByUnitUnitIdAndStatus(
+    List<DutyAssignment> findByUnitIdAndStatus(
             Long unitId,
             String status
     );
 
-    List<DutyAssignment> findByUnitUnitIdAndDutyDateBetweenAndStatus(
+    List<DutyAssignment> findByUnitIdAndDutyDateBetweenAndStatus(
             Long unitId,
             LocalDate startDate,
             LocalDate endDate,
             String status
     );
 
-    boolean existsByUserUserIdAndDutyDateAndDutyType(
+    boolean existsByUserIdAndDutyDateAndDutyType(
             Long userId,
             LocalDate dutyDate,
             String dutyType
     );
 
-    boolean existsByUserUserIdAndDutyDateAndStatus(
+    boolean existsByUserIdAndDutyDateAndStatus(
             Long userId,
             LocalDate dutyDate,
             String status
     );
 
-    long countByUserUserIdAndDutyDateBetweenAndStatus(
+    long countByUserIdAndDutyDateBetweenAndStatus(
             Long userId,
             LocalDate startDate,
             LocalDate endDate,

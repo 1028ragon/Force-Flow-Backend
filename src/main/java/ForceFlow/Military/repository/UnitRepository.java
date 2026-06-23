@@ -7,7 +7,7 @@ import java.util.List;
 
 public interface UnitRepository extends JpaRepository<Unit, Long> {
 
-    List<Unit> findByParentUnitUnitId(Long parentUnitId);
+    List<Unit> findByParentUnitId(Long parentUnitId);
 
     List<Unit> findByUnitType(String unitType);
 

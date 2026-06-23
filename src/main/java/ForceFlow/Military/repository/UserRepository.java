@@ -7,18 +7,18 @@ import java.util.List;
 
 public interface UserRepository extends JpaRepository<User, Long> {
 
-    List<User> findByUnitUnitId(Long unitId);
+    List<User> findByUnitId(Long unitId);
 
-    List<User> findByUnitUnitIdAndCurrentStatus(
+    List<User> findByUnitIdAndCurrentStatus(
             Long unitId,
             String currentStatus
     );
 
     boolean existsByServiceNumber(String serviceNumber);
 
-    long countByUnitUnitId(Long unitId);
+    long countByUnitId(Long unitId);
 
-    long countByUnitUnitIdAndCurrentStatus(
+    long countByUnitIdAndCurrentStatus(
             Long unitId,
             String currentStatus
     );

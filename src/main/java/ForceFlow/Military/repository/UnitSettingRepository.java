@@ -7,8 +7,8 @@ import java.util.Optional;
 
 public interface UnitSettingRepository extends JpaRepository<UnitSetting, Long> {
 
-    Optional<UnitSetting> findByUnitUnitId(Long unitId);
+    Optional<UnitSetting> findByUnitId(Long unitId);
 
-    boolean existsByUnitUnitId(Long unitId);
+    boolean existsByUnitId(Long unitId);
 
 }

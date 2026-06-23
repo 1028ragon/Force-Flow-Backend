@@ -7,9 +7,9 @@ import java.util.List;
 
 public interface AiRecommendationRepository extends JpaRepository<AiRecommendation, Long> {
 
-    List<AiRecommendation> findByUnitUnitId(Long unitId);
+    List<AiRecommendation> findByUnitId(Long unitId);
 
-    List<AiRecommendation> findByUnitUnitIdAndStatus(
+    List<AiRecommendation> findByUnitIdAndStatus(
             Long unitId,
             String status
     );

@@ -8,11 +8,11 @@ import java.util.List;
 
 public interface ScheduleRepository extends JpaRepository<Schedule, Long> {
 
-    List<Schedule> findByUserUserId(Long userId);
+    List<Schedule> findByUserId(Long userId);
 
-    List<Schedule> findByUserUnitUnitId(Long unitId);
+    List<Schedule> findByUserUnitId(Long unitId);
 
-    boolean existsByUserUserIdAndStartAtLessThanEqualAndEndAtGreaterThanEqual(
+    boolean existsByUserIdAndStartAtLessThanEqualAndEndAtGreaterThanEqual(
             Long userId,
             LocalDateTime dutyEndAt,
             LocalDateTime dutyStartAt
