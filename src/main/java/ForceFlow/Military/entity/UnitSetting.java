@@ -1,15 +1,36 @@
 package ForceFlow.Military.entity;
 
-import jakarta.persistence.*;
-
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.FetchType;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.GenerationType;
+import jakarta.persistence.Id;
+import jakarta.persistence.JoinColumn;
+import jakarta.persistence.ManyToOne;
+import jakarta.persistence.PrePersist;
+import jakarta.persistence.PreUpdate;
+import jakarta.persistence.Table;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
+import java.util.Arrays;
 import java.util.List;
-import java.util.StringJoiner;
+import lombok.Builder;
+import lombok.Getter;
 
+@Getter
 @Entity
 @Table(name = "unit_setting")
 public class UnitSetting {
+
+    private static final String DEFAULT_DUTY_TYPE = "불침번";
+    private static final int DEFAULT_REQUIRED_COUNT = 3;
+    private static final LocalTime DEFAULT_START_TIME = LocalTime.of(22, 0);
+    private static final LocalTime DEFAULT_END_TIME = LocalTime.of(6, 0);
+    private static final int DEFAULT_LOOKBACK_DAYS = 7;
+    private static final boolean DEFAULT_PREVENT_CONSECUTIVE = true;
+    private static final int DEFAULT_MAX_DUTY_COUNT = 5;
+    private static final String DEFAULT_EXCLUDE_STATUSES = "휴가,외출,외박,교육,훈련,입원,외진";
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -53,6 +74,7 @@ public class UnitSetting {
     protected UnitSetting() {
     }
 
+    @Builder
     public UnitSetting(
             Unit unit,
             String dutyType,
@@ -65,13 +87,13 @@ public class UnitSetting {
             List<String> excludeStatuses
     ) {
         this.unit = unit;
-        this.dutyType = dutyType;
-        this.requiredCount = requiredCount;
-        this.startTime = startTime;
-        this.endTime = endTime;
-        this.lookbackDays = lookbackDays;
-        this.preventConsecutive = preventConsecutive;
-        this.maxDutyCount = maxDutyCount;
+        this.dutyType = dutyType != null ? dutyType : DEFAULT_DUTY_TYPE;
+        this.requiredCount = requiredCount != null ? requiredCount : DEFAULT_REQUIRED_COUNT;
+        this.startTime = startTime != null ? startTime : DEFAULT_START_TIME;
+        this.endTime = endTime != null ? endTime : DEFAULT_END_TIME;
+        this.lookbackDays = lookbackDays != null ? lookbackDays : DEFAULT_LOOKBACK_DAYS;
+        this.preventConsecutive = preventConsecutive != null ? preventConsecutive : DEFAULT_PREVENT_CONSECUTIVE;
+        this.maxDutyCount = maxDutyCount != null ? maxDutyCount : DEFAULT_MAX_DUTY_COUNT;
         this.excludeStatuses = joinStatuses(excludeStatuses);
     }
 
@@ -85,10 +107,39 @@ public class UnitSetting {
             Integer maxDutyCount,
             List<String> excludeStatuses
     ) {
-        this.dutyType = dutyType;
-        this.requiredCount = requiredCount;
-        this.startTime = startTime;
-        this.endTime = endTime;
+        this.dutyType = dutyType != null ? dutyType : DEFAULT_DUTY_TYPE;
+        this.requiredCount = requiredCount != null ? requiredCount : DEFAULT_REQUIRED_COUNT;
+        this.startTime = startTime != null ? startTime : DEFAULT_START_TIME;
+        this.endTime = endTime != null ? endTime : DEFAULT_END_TIME;
+        this.lookbackDays = lookbackDays != null ? lookbackDays : DEFAULT_LOOKBACK_DAYS;
+        this.preventConsecutive = preventConsecutive != null ? preventConsecutive : DEFAULT_PREVENT_CONSECUTIVE;
+        this.maxDutyCount = maxDutyCount != null ? maxDutyCount : DEFAULT_MAX_DUTY_COUNT;
+        this.excludeStatuses = joinStatuses(excludeStatuses);
+    }
+
+    @PrePersist
+    void prePersist() {
+        this.createdAt = LocalDateTime.now();
+    }
+
+    @PreUpdate
+    void preUpdate() {
+        this.updatedAt = LocalDateTime.now();
+    }
+
+    public List<String> getExcludeStatusList() {
+        if (excludeStatuses == null || excludeStatuses.isBlank()) {
+            return List.of();
+        }
+
+        return Arrays.asList(excludeStatuses.split(","));
+    }
+
+    private String joinStatuses(List<String> statuses) {
+        if (statuses == null || statuses.isEmpty()) {
+            return DEFAULT_EXCLUDE_STATUSES;
+        }
+
+        return String.join(",", statuses);
     }
 }
-

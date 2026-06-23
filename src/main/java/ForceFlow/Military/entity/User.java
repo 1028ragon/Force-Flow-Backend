@@ -11,10 +11,16 @@ import jakarta.persistence.ManyToOne;
 import jakarta.persistence.PrePersist;
 import jakarta.persistence.Table;
 import java.time.LocalDateTime;
+import lombok.Builder;
+import lombok.Getter;
 
+@Getter
 @Entity
 @Table(name = "users")
 public class User {
+
+    private static final String DEFAULT_ROLE = "SOLDIER";
+    private static final String DEFAULT_CURRENT_STATUS = "부대내";
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -49,6 +55,7 @@ public class User {
     protected User() {
     }
 
+    @Builder
     public User(
             Unit unit,
             String serviceNumber,
@@ -62,8 +69,8 @@ public class User {
         this.serviceNumber = serviceNumber;
         this.name = name;
         this.rankName = rankName;
-        this.role = role;
-        this.currentStatus = currentStatus;
+        this.role = role != null ? role : DEFAULT_ROLE;
+        this.currentStatus = currentStatus != null ? currentStatus : DEFAULT_CURRENT_STATUS;
         this.phone = phone;
     }
 
@@ -74,29 +81,5 @@ public class User {
 
     public void changeStatus(String currentStatus) {
         this.currentStatus = currentStatus;
-    }
-
-    public Long getId() {
-        return id;
-    }
-
-    public Unit getUnit() {
-        return unit;
-    }
-
-    public String getServiceNumber() {
-        return serviceNumber;
-    }
-
-    public String getName() {
-        return name;
-    }
-
-    public String getRankName() {
-        return rankName;
-    }
-
-    public String getRole() {
-        return role;
     }
 }

@@ -14,7 +14,10 @@ import jakarta.persistence.Table;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import lombok.Builder;
+import lombok.Getter;
 
+@Getter
 @Entity
 @Table(name = "unit")
 public class Unit {
@@ -43,6 +46,7 @@ public class Unit {
     protected Unit() {
     }
 
+    @Builder
     public Unit(Unit parentUnit, String unitName, String unitType) {
         this.parentUnit = parentUnit;
         this.unitName = unitName;
@@ -53,29 +57,4 @@ public class Unit {
     void prePersist() {
         this.createdAt = LocalDateTime.now();
     }
-
-    public Long getId() {
-        return id;
-    }
-
-    public Unit getParentUnit() {
-        return parentUnit;
-    }
-
-    public List<Unit> getChildUnits() {
-        return childUnits;
-    }
-
-    public String getUnitName() {
-        return unitName;
-    }
-
-    public String getUnitType() {
-        return unitType;
-    }
-
-    public LocalDateTime getCreatedAt() {
-        return createdAt;
-    }
 }
-

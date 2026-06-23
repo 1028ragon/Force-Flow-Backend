@@ -1,5 +1,6 @@
 package ForceFlow.Military.entity;
 
+
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.FetchType;
@@ -16,10 +17,15 @@ import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.util.ArrayList;
 import java.util.List;
+import lombok.Builder;
+import lombok.Getter;
 
+@Getter
 @Entity
 @Table(name = "ai_recommendation")
 public class AiRecommendation {
+
+    private static final String DEFAULT_STATUS = "추천";
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -66,6 +72,7 @@ public class AiRecommendation {
     protected AiRecommendation() {
     }
 
+    @Builder
     public AiRecommendation(
             Unit unit,
             LocalDate dutyDate,
@@ -84,7 +91,7 @@ public class AiRecommendation {
         this.requiredCount = requiredCount;
         this.startTime = startTime;
         this.endTime = endTime;
-        this.status = status;
+        this.status = status != null ? status : DEFAULT_STATUS;
         this.warningMessage = warningMessage;
         this.requestJson = requestJson;
         this.responseJson = responseJson;
@@ -93,9 +100,5 @@ public class AiRecommendation {
     @PrePersist
     void prePersist() {
         this.createdAt = LocalDateTime.now();
-    }
-
-    public Long getId() {
-        return id;
     }
 }

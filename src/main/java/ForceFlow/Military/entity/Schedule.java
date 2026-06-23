@@ -1,5 +1,6 @@
 package ForceFlow.Military.entity;
 
+
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.FetchType;
@@ -11,10 +12,15 @@ import jakarta.persistence.ManyToOne;
 import jakarta.persistence.PrePersist;
 import jakarta.persistence.Table;
 import java.time.LocalDateTime;
+import lombok.Builder;
+import lombok.Getter;
 
+@Getter
 @Entity
 @Table(name = "schedule")
 public class Schedule {
+
+    private static final String DEFAULT_STATUS = "예정";
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -46,12 +52,13 @@ public class Schedule {
     protected Schedule() {
     }
 
+    @Builder
     public Schedule(User user, String type, LocalDateTime startAt, LocalDateTime endAt, String status, String reason) {
         this.user = user;
         this.type = type;
         this.startAt = startAt;
         this.endAt = endAt;
-        this.status = status;
+        this.status = status != null ? status : DEFAULT_STATUS;
         this.reason = reason;
     }
 
@@ -59,37 +66,4 @@ public class Schedule {
     void prePersist() {
         this.createdAt = LocalDateTime.now();
     }
-
-    public Long getId() {
-        return id;
-    }
-
-    public User getUser() {
-        return user;
-    }
-
-    public String getType() {
-        return type;
-    }
-
-    public LocalDateTime getStartAt() {
-        return startAt;
-    }
-
-    public LocalDateTime getEndAt() {
-        return endAt;
-    }
-
-    public String getStatus() {
-        return status;
-    }
-
-    public String getReason() {
-        return reason;
-    }
-
-    public LocalDateTime getCreatedAt() {
-        return createdAt;
-    }
 }
-

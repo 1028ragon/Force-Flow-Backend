@@ -14,7 +14,10 @@ import jakarta.persistence.UniqueConstraint;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
+import lombok.Builder;
+import lombok.Getter;
 
+@Getter
 @Entity
 @Table(
         name = "duty_assignment",
@@ -24,6 +27,8 @@ import java.time.LocalTime;
         )
 )
 public class DutyAssignment {
+
+    private static final String DEFAULT_STATUS = "추천";
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -69,6 +74,7 @@ public class DutyAssignment {
     protected DutyAssignment() {
     }
 
+    @Builder
     public DutyAssignment(
             AiRecommendation aiRecommendation,
             User user,
@@ -87,7 +93,7 @@ public class DutyAssignment {
         this.dutyType = dutyType;
         this.startTime = startTime;
         this.endTime = endTime;
-        this.status = status;
+        this.status = status != null ? status : DEFAULT_STATUS;
         this.aiReason = aiReason;
     }
 
@@ -98,5 +104,6 @@ public class DutyAssignment {
 
     public void approve() {
         this.status = "승인";
+        this.approvedAt = LocalDateTime.now();
     }
 }
