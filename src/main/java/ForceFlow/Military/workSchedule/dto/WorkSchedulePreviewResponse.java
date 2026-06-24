@@ -5,6 +5,7 @@ import java.time.LocalTime;
 import java.util.List;
 
 public record WorkSchedulePreviewResponse(
+        Long recommendationId,
         Long unitId,
         LocalDate dutyDate,
         String dutyType,

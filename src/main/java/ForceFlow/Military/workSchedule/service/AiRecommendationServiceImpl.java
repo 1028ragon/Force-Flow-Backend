@@ -53,17 +53,23 @@ public class AiRecommendationServiceImpl implements AiRecommendationService {
     private final DutyAssignmentRepository dutyAssignmentRepository;
 
     @Override
-    @Transactional(readOnly = true)
+    @Transactional
     public WorkSchedulePreviewResponse previewSchedule(AiRecommendationCreateRequest request) {
         AiInternalRequest internalRequest = aiInternalRequestBuilder.build(request);
         AiModelResponse aiResponse = openAiScheduleClient.recommend(internalRequest);
         aiRecommendationValidator.validate(internalRequest, aiResponse);
+        String requestJson = writeJson(internalRequest);
+        String responseJson = writeJson(aiResponse);
+        AiRecommendation aiRecommendation = aiRecommendationRepository.save(
+                toPreviewRecommendation(internalRequest, aiResponse, requestJson, responseJson)
+        );
 
         return toPreviewResponse(
+                aiRecommendation.getId(),
                 internalRequest,
                 aiResponse,
-                writeJson(internalRequest),
-                writeJson(aiResponse)
+                requestJson,
+                responseJson
         );
     }
 
@@ -80,7 +86,7 @@ public class AiRecommendationServiceImpl implements AiRecommendationService {
         Set<Long> allowedUnitIds = new HashSet<>(unitRepository.findAllSubUnitIds(request.unitId()));
         validateConfirmAssignments(request, setting, usersById, allowedUnitIds);
 
-        AiRecommendation aiRecommendation = aiRecommendationRepository.save(toAiRecommendation(request, unit));
+        AiRecommendation aiRecommendation = resolveAiRecommendation(request, unit);
         List<DutyAssignment> assignments = request.assignments().stream()
                 .map(assignmentRequest -> toApprovedAssignment(
                         assignmentRequest,
@@ -95,6 +101,7 @@ public class AiRecommendationServiceImpl implements AiRecommendationService {
     }
 
     private WorkSchedulePreviewResponse toPreviewResponse(
+            Long recommendationId,
             AiInternalRequest internalRequest,
             AiModelResponse aiResponse,
             String requestJson,
@@ -106,6 +113,7 @@ public class AiRecommendationServiceImpl implements AiRecommendationService {
         );
 
         return new WorkSchedulePreviewResponse(
+                recommendationId,
                 internalRequest.unit().unitId(),
                 internalRequest.duty().dutyDate(),
                 internalRequest.duty().dutyType(),
@@ -118,6 +126,29 @@ public class AiRecommendationServiceImpl implements AiRecommendationService {
                 requestJson,
                 responseJson
         );
+    }
+
+    private AiRecommendation toPreviewRecommendation(
+            AiInternalRequest internalRequest,
+            AiModelResponse aiResponse,
+            String requestJson,
+            String responseJson
+    ) {
+        Unit unit = unitRepository.findById(internalRequest.unit().unitId())
+                .orElseThrow(() -> new IllegalArgumentException("부대를 찾을 수 없습니다."));
+
+        return AiRecommendation.builder()
+                .unit(unit)
+                .dutyDate(internalRequest.duty().dutyDate())
+                .dutyType(internalRequest.duty().dutyType())
+                .requiredCount(internalRequest.duty().requiredCount())
+                .startTime(internalRequest.duty().startTime())
+                .endTime(internalRequest.duty().endTime())
+                .status(DutyStatus.PREVIEW)
+                .warningMessage(aiResponse.warningMessage())
+                .requestJson(requestJson)
+                .responseJson(responseJson)
+                .build();
     }
 
     private List<WorkSchedulePreviewAssignmentResponse> toPreviewAssignments(
@@ -163,7 +194,7 @@ public class AiRecommendationServiceImpl implements AiRecommendationService {
         if (request.assignments().size() != request.requiredCount()) {
             throw new IllegalArgumentException("승인 배정 인원 수가 필요 인원과 일치하지 않습니다.");
         }
-        if (isBlank(request.requestJson())) {
+        if (request.recommendationId() == null && isBlank(request.requestJson())) {
             throw new IllegalArgumentException("AI 내부 요청 JSON이 비어 있습니다.");
         }
     }
@@ -289,6 +320,79 @@ public class AiRecommendationServiceImpl implements AiRecommendationService {
                 .requestJson(request.requestJson())
                 .responseJson(responseJson)
                 .build();
+    }
+
+    private AiRecommendation resolveAiRecommendation(WorkScheduleConfirmRequest request, Unit unit) {
+        if (request.recommendationId() == null) {
+            return aiRecommendationRepository.save(toAiRecommendation(request, unit));
+        }
+
+        AiRecommendation aiRecommendation = aiRecommendationRepository.findById(request.recommendationId())
+                .orElseThrow(() -> new IllegalArgumentException("AI 추천 기록을 찾을 수 없습니다."));
+        validateRecommendationMatchesRequest(aiRecommendation, request);
+        validateConfirmAssignmentsMatchPreview(aiRecommendation, request);
+        return aiRecommendationRepository.save(toApprovedRecommendation(aiRecommendation));
+    }
+
+    private AiRecommendation toApprovedRecommendation(AiRecommendation aiRecommendation) {
+        return AiRecommendation.builder()
+                .unit(aiRecommendation.getUnit())
+                .dutyDate(aiRecommendation.getDutyDate())
+                .dutyType(aiRecommendation.getDutyType())
+                .requiredCount(aiRecommendation.getRequiredCount())
+                .startTime(aiRecommendation.getStartTime())
+                .endTime(aiRecommendation.getEndTime())
+                .status(DutyStatus.APPROVED)
+                .warningMessage(aiRecommendation.getWarningMessage())
+                .requestJson(aiRecommendation.getRequestJson())
+                .responseJson(aiRecommendation.getResponseJson())
+                .build();
+    }
+
+    private void validateRecommendationMatchesRequest(
+            AiRecommendation aiRecommendation,
+            WorkScheduleConfirmRequest request
+    ) {
+        if (!aiRecommendation.getUnit().getId().equals(request.unitId())
+                || !aiRecommendation.getDutyDate().equals(request.dutyDate())
+                || !aiRecommendation.getDutyType().equals(request.dutyType())
+                || !aiRecommendation.getRequiredCount().equals(request.requiredCount())
+                || !aiRecommendation.getStartTime().equals(request.startTime())
+                || !aiRecommendation.getEndTime().equals(request.endTime())) {
+            throw new IllegalArgumentException("AI 추천 기록과 확정 요청 정보가 일치하지 않습니다.");
+        }
+        if (DutyStatus.APPROVED.equals(aiRecommendation.getStatus())) {
+            throw new IllegalArgumentException("이미 승인된 AI 추천 기록입니다.");
+        }
+    }
+
+    private void validateConfirmAssignmentsMatchPreview(
+            AiRecommendation aiRecommendation,
+            WorkScheduleConfirmRequest request
+    ) {
+        AiModelResponse aiResponse = readAiModelResponse(aiRecommendation.getResponseJson());
+        Set<Long> previewUserIds = aiResponse.recommendedUsers().stream()
+                .map(AiRecommendedUser::userId)
+                .collect(Collectors.toSet());
+        Set<Long> confirmUserIds = request.assignments().stream()
+                .map(WorkScheduleConfirmAssignmentRequest::userId)
+                .collect(Collectors.toSet());
+
+        if (!previewUserIds.equals(confirmUserIds)) {
+            throw new IllegalArgumentException("확정 배정 인원이 미리보기 추천 결과와 일치하지 않습니다.");
+        }
+    }
+
+    private AiModelResponse readAiModelResponse(String responseJson) {
+        if (isBlank(responseJson)) {
+            throw new IllegalArgumentException("AI 추천 응답 JSON이 비어 있습니다.");
+        }
+
+        try {
+            return objectMapper.readValue(responseJson, AiModelResponse.class);
+        } catch (Exception exception) {
+            throw new WorkScheduleServiceException("AI 추천 응답 JSON 처리에 실패했습니다.", exception);
+        }
     }
 
     private DutyAssignment toApprovedAssignment(
