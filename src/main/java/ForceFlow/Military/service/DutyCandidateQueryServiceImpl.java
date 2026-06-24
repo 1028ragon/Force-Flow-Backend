@@ -38,12 +38,14 @@ public class DutyCandidateQueryServiceImpl implements DutyCandidateQueryService 
             LocalTime endTime,
             UnitSettingResponse setting
     ) {
+        // 대상 부대와 모든 하위 부대 소속 인원을 후보군으로 조회한다.
         List<Long> unitIds = unitRepository.findAllSubUnitIds(unitId);
         List<User> users = userRepository.findByUnitIdIn(unitIds);
         if (users.isEmpty()) {
             return List.of();
         }
 
+        // N+1 쿼리를 방지하기 위해 필터 조건별 제외 대상 userId를 배치 조회한다.
         List<Long> userIds = users.stream()
                 .map(User::getId)
                 .toList();
@@ -73,6 +75,7 @@ public class DutyCandidateQueryServiceImpl implements DutyCandidateQueryService 
                 setting.maxDutyCount()
         );
 
+        // DB에서 가져온 제외 대상 Set을 기준으로 메모리에서 최종 후보자를 걸러낸다.
         return users.stream()
                 .filter(user -> !excludedStatuses.contains(user.getCurrentStatus()))
                 .filter(user -> !scheduleConflictUserIds.contains(user.getId()))
@@ -83,11 +86,13 @@ public class DutyCandidateQueryServiceImpl implements DutyCandidateQueryService 
                 .toList();
     }
 
+    // 종료 시간이 시작 시간보다 빠르면 다음날 종료되는 야간 근무로 처리한다.
     private LocalDateTime resolveDutyEndAt(LocalDate dutyDate, LocalTime startTime, LocalTime endTime) {
         LocalDate endDate = endTime.isAfter(startTime) ? dutyDate : dutyDate.plusDays(1);
         return LocalDateTime.of(endDate, endTime);
     }
 
+    // 연속 근무 방지 옵션이 켜진 경우 전날 승인된 근무자가 있는지 배치 조회한다.
     private Set<Long> findConsecutiveDutyUserIds(
             List<Long> userIds,
             LocalDate previousDutyDate,
@@ -104,6 +109,7 @@ public class DutyCandidateQueryServiceImpl implements DutyCandidateQueryService 
         ));
     }
 
+    // lookbackDays 또는 maxDutyCount 설정이 없으면 근무 횟수 제한 필터를 적용하지 않는다.
     private Set<Long> findDutyLimitExceededUserIds(
             List<Long> userIds,
             LocalDate dutyDate,
@@ -124,6 +130,7 @@ public class DutyCandidateQueryServiceImpl implements DutyCandidateQueryService 
         ));
     }
 
+    // nullable List를 안전하게 Set으로 변환한다.
     private <T> Set<T> toSet(List<T> values) {
         if (values == null) {
             return Collections.emptySet();
@@ -132,6 +139,7 @@ public class DutyCandidateQueryServiceImpl implements DutyCandidateQueryService 
         return new HashSet<>(values);
     }
 
+    // 서비스 외부에는 entity 대신 response DTO를 반환한다.
     private UserResponse toResponse(User user) {
         return new UserResponse(
                 user.getId(),
