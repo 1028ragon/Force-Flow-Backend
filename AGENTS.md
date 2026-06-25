@@ -177,7 +177,7 @@ Content-Type: application/json
 `POST /api/work-schedules/preview`는 저장된 슬롯 설정을 읽어 초번별 `slotOrder`, `startTime`, `endTime`, `requiredCount`, `allowedRoles` 조건에 맞춰 추천 결과를 만든다. `POST /api/work-schedules/confirm`은 프론트가 보낸 초번별 배정이 설정의 시간대별 필요 인원과 허용 역할에 맞는지 검증한 뒤 `duty_assignment`에 병사별 실제 분할 시간으로 저장한다.
 
 Confirm 요청은 `/preview` 응답의 `assignments`, `requestJson`, `responseJson`을 기반으로 만든다.
-현재 구현은 `/preview`가 `ai_recommendation` 기록을 먼저 저장하고 `recommendationId`를 반환한다. `/confirm`은 `recommendationId`와 `assignments`만으로 확정할 수 있으며, 프론트가 `requestJson`, `responseJson`을 직접 관리하지 않아도 된다.
+현재 구현은 `/preview`가 `ai_recommendation` 기록을 먼저 저장하고 `recommendationId`를 반환한다. `requestJson`, `responseJson`은 백엔드 DB 기록용으로만 저장하며 preview 응답에는 내려주지 않는다. `/confirm`은 `recommendationId`와 `assignments`만으로 확정할 수 있으며, 프론트가 `requestJson`, `responseJson`을 직접 관리하지 않아도 된다.
 
 ## 사용자가 제공한 DB 샘플 데이터 기준
 

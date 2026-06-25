@@ -74,9 +74,7 @@ public class AiRecommendationServiceImpl implements AiRecommendationService {
         return toPreviewResponse(
                 aiRecommendation.getId(),
                 internalRequest,
-                aiResponse,
-                requestJson,
-                responseJson
+                aiResponse
         );
     }
 
@@ -193,9 +191,7 @@ public class AiRecommendationServiceImpl implements AiRecommendationService {
     private WorkSchedulePreviewResponse toPreviewResponse(
             Long recommendationId,
             AiInternalRequest internalRequest,
-            AiModelResponse aiResponse,
-            String requestJson,
-            String responseJson
+            AiModelResponse aiResponse
     ) {
         List<WorkSchedulePreviewAssignmentResponse> assignments = toPreviewAssignments(
                 internalRequest,
@@ -212,9 +208,7 @@ public class AiRecommendationServiceImpl implements AiRecommendationService {
                 internalRequest.duty().endTime(),
                 DutyStatus.PREVIEW,
                 aiResponse.warningMessage(),
-                assignments,
-                requestJson,
-                responseJson
+                assignments
         );
     }
 

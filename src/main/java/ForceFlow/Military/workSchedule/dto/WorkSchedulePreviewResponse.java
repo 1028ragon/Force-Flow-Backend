@@ -14,8 +14,6 @@ public record WorkSchedulePreviewResponse(
         LocalTime endTime,
         String status,
         String warningMessage,
-        List<WorkSchedulePreviewAssignmentResponse> assignments,
-        String requestJson,
-        String responseJson
+        List<WorkSchedulePreviewAssignmentResponse> assignments
 ) {
 }
