@@ -2,10 +2,12 @@ package ForceFlow.Military.workSchedule.controller;
 
 import ForceFlow.Military.dto.requestDto.AiRecommendationCreateRequest;
 import ForceFlow.Military.dto.requestDto.AiRecommendationResponse;
+import ForceFlow.Military.workSchedule.dto.WorkScheduleCandidateSearchResponse;
 import ForceFlow.Military.workSchedule.dto.WorkScheduleConfirmRequest;
 import ForceFlow.Military.workSchedule.dto.WorkScheduleDailyResponse;
 import ForceFlow.Military.workSchedule.dto.WorkSchedulePreviewResponse;
 import ForceFlow.Military.workSchedule.service.AiRecommendationService;
+import ForceFlow.Military.workSchedule.service.WorkScheduleCandidateService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import java.time.LocalDate;
@@ -23,6 +25,7 @@ import org.springframework.web.bind.annotation.RestController;
 public class AiRecommendationController {
 
     private final AiRecommendationService aiRecommendationService;
+    private final WorkScheduleCandidateService workScheduleCandidateService;
 
     @GetMapping
     public WorkScheduleDailyResponse getDailySchedule(
@@ -31,6 +34,23 @@ public class AiRecommendationController {
             @RequestParam(required = false) String dutyType
     ) {
         return aiRecommendationService.getDailySchedule(unitId, dutyDate, dutyType);
+    }
+
+    @GetMapping("/candidates")
+    public WorkScheduleCandidateSearchResponse searchCandidates(
+            @RequestParam Long unitId,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate dutyDate,
+            @RequestParam String dutyType,
+            @RequestParam(required = false) Integer slotOrder,
+            @RequestParam(required = false) String keyword
+    ) {
+        return workScheduleCandidateService.searchCandidates(
+                unitId,
+                dutyDate,
+                dutyType,
+                slotOrder,
+                keyword
+        );
     }
 
     @PostMapping("/preview")

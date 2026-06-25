@@ -97,6 +97,7 @@ public class AiRecommendationServiceImpl implements AiRecommendationService {
         AiRecommendation aiRecommendation = resolveAiRecommendation(request, unit);
         List<DutyAssignment> assignments = request.assignments().stream()
                 .map(assignmentRequest -> toApprovedAssignment(
+                        request,
                         assignmentRequest,
                         aiRecommendation,
                         unit,
@@ -406,12 +407,6 @@ public class AiRecommendationServiceImpl implements AiRecommendationService {
         if (!seenUserIds.add(assignment.userId())) {
             throw new IllegalArgumentException("동일 병사가 중복 배정되었습니다.");
         }
-        if (!request.unitId().equals(assignment.unitId())
-                || !request.dutyDate().equals(assignment.dutyDate())
-                || !request.dutyType().equals(assignment.dutyType())) {
-            throw new IllegalArgumentException("승인 배정 정보가 근무표 기본 정보와 일치하지 않습니다.");
-        }
-
         User user = usersById.get(assignment.userId());
         if (user == null) {
             throw new IllegalArgumentException("존재하지 않는 병사가 포함되어 있습니다.");
@@ -419,51 +414,60 @@ public class AiRecommendationServiceImpl implements AiRecommendationService {
         if (!allowedUnitIds.contains(user.getUnit().getId())) {
             throw new IllegalArgumentException("요청 부대 소속이 아닌 병사가 포함되어 있습니다.");
         }
-        if (!isBlank(assignment.role()) && !assignment.role().equals(user.getRole())) {
-            throw new IllegalArgumentException("병사 역할과 배정 역할이 일치하지 않습니다.");
-        }
         if (excludedStatuses.contains(user.getCurrentStatus())) {
             throw new IllegalArgumentException("제외 상태의 병사가 포함되어 있습니다.");
         }
-        if (hasScheduleConflict(assignment)) {
+        if (hasScheduleConflict(request, assignment)) {
             throw new IllegalArgumentException("일정 충돌이 있는 병사가 포함되어 있습니다.");
         }
-        if (hasExistingApprovedDuty(assignment)) {
+        if (hasExistingApprovedDuty(request, assignment)) {
             throw new IllegalArgumentException("이미 승인된 동일 근무가 있는 병사가 포함되어 있습니다.");
         }
-        if (Boolean.TRUE.equals(setting.getPreventConsecutive()) && hasApprovedDutyYesterday(assignment)) {
+        if (Boolean.TRUE.equals(setting.getPreventConsecutive()) && hasApprovedDutyYesterday(request, assignment)) {
             throw new IllegalArgumentException("전날 승인 근무자가 포함되어 있습니다.");
         }
     }
 
-    private boolean hasScheduleConflict(WorkScheduleConfirmAssignmentRequest assignment) {
+    private boolean hasScheduleConflict(
+            WorkScheduleConfirmRequest request,
+            WorkScheduleConfirmAssignmentRequest assignment
+    ) {
         return scheduleRepository.existsByUserIdAndStartAtLessThanEqualAndEndAtGreaterThanEqual(
                 assignment.userId(),
-                resolveDutyEndAt(assignment),
-                assignment.dutyDate().atTime(assignment.startTime())
+                resolveDutyEndAt(request, assignment),
+                request.dutyDate().atTime(assignment.startTime())
         );
     }
 
-    private boolean hasExistingApprovedDuty(WorkScheduleConfirmAssignmentRequest assignment) {
+    private boolean hasExistingApprovedDuty(
+            WorkScheduleConfirmRequest request,
+            WorkScheduleConfirmAssignmentRequest assignment
+    ) {
         return dutyAssignmentRepository.existsByUserIdAndDutyDateAndStatus(
                 assignment.userId(),
-                assignment.dutyDate(),
+                request.dutyDate(),
                 DutyStatus.APPROVED
         );
     }
 
-    private boolean hasApprovedDutyYesterday(WorkScheduleConfirmAssignmentRequest assignment) {
+    private boolean hasApprovedDutyYesterday(
+            WorkScheduleConfirmRequest request,
+            WorkScheduleConfirmAssignmentRequest assignment
+    ) {
         return dutyAssignmentRepository.existsByUserIdAndDutyDateAndStatus(
                 assignment.userId(),
-                assignment.dutyDate().minusDays(1),
+                request.dutyDate().minusDays(1),
                 DutyStatus.APPROVED
         );
     }
 
-    private LocalDateTime resolveDutyEndAt(WorkScheduleConfirmAssignmentRequest assignment) {
+    private LocalDateTime resolveDutyEndAt(
+            WorkScheduleConfirmRequest request,
+            WorkScheduleConfirmAssignmentRequest assignment
+    ) {
         LocalDate endDate = assignment.endTime().isAfter(assignment.startTime())
-                ? assignment.dutyDate()
-                : assignment.dutyDate().plusDays(1);
+                ? request.dutyDate()
+                : request.dutyDate().plusDays(1);
         return endDate.atTime(assignment.endTime());
     }
 
@@ -528,6 +532,7 @@ public class AiRecommendationServiceImpl implements AiRecommendationService {
     }
 
     private DutyAssignment toApprovedAssignment(
+            WorkScheduleConfirmRequest confirmRequest,
             WorkScheduleConfirmAssignmentRequest request,
             AiRecommendation aiRecommendation,
             Unit unit,
@@ -537,8 +542,8 @@ public class AiRecommendationServiceImpl implements AiRecommendationService {
                 .aiRecommendation(aiRecommendation)
                 .user(user)
                 .unit(unit)
-                .dutyDate(request.dutyDate())
-                .dutyType(request.dutyType())
+                .dutyDate(confirmRequest.dutyDate())
+                .dutyType(confirmRequest.dutyType())
                 .startTime(request.startTime())
                 .endTime(request.endTime())
                 .status(DutyStatus.APPROVED)

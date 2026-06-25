@@ -28,6 +28,7 @@
 
 - `POST /api/work-schedules/preview`
 - `POST /api/work-schedules/confirm`
+- `GET /api/work-schedules/candidates?unitId={unitId}&dutyDate={yyyy-MM-dd}&dutyType={dutyType}&slotOrder={slotOrder}&keyword={keyword}`
 - `GET /api/work-schedules?unitId={unitId}&dutyDate={yyyy-MM-dd}`
 - `GET /api/work-schedules/units/{unitId}/setting`
 - `PUT /api/work-schedules/units/{unitId}/setting`
@@ -176,6 +177,14 @@ Content-Type: application/json
 
 `POST /api/work-schedules/preview`는 저장된 슬롯 설정을 읽어 초번별 `slotOrder`, `startTime`, `endTime`, `requiredCount`, `allowedRoles` 조건에 맞춰 추천 결과를 만든다. `POST /api/work-schedules/confirm`은 프론트가 보낸 초번별 배정이 설정의 시간대별 필요 인원과 허용 역할에 맞는지 검증한 뒤 `duty_assignment`에 병사별 실제 분할 시간으로 저장한다.
 
+병사 수정용 후보 검색 API:
+
+```http
+GET http://localhost:8080/api/work-schedules/candidates?unitId=2&dutyDate=2026-06-30&dutyType=불침번&slotOrder=1&keyword=배
+```
+
+프론트는 이름으로 후보를 검색하되, 최종 confirm 요청에는 반드시 선택한 병사의 `userId`를 보낸다. `slotOrder`를 함께 보내면 해당 시간대의 `allowedRoles` 기준으로 후보가 필터링된다.
+
 Confirm 요청은 `/preview` 응답의 `assignments`, `requestJson`, `responseJson`을 기반으로 만든다.
 현재 구현은 `/preview`가 `ai_recommendation` 기록을 먼저 저장하고 `recommendationId`를 반환한다. `requestJson`, `responseJson`은 백엔드 DB 기록용으로만 저장하며 preview 응답에는 내려주지 않는다. `/confirm`은 `recommendationId`와 `assignments`만으로 확정할 수 있으며, 프론트가 `requestJson`, `responseJson`을 직접 관리하지 않아도 된다.
 
@@ -238,7 +247,7 @@ Confirm 요청은 `/preview` 응답의 `assignments`, `requestJson`, `responseJs
 - `unitId: 2`로 테스트하려면 `unit_setting`에 `unit_id = 2` 설정이 있어야 한다.
 - `dutyType`은 `unit_setting.duty_type`과 정확히 같아야 한다.
 - `assignments` 개수는 `requiredCount`와 같아야 한다.
-- `confirm` 요청의 `role`은 DB의 `users.role`과 정확히 같아야 한다.
+- `confirm` 요청의 assignment에는 `role`, `unitId`, `dutyDate`, `dutyType`을 보내지 않아도 된다. 백엔드는 상위 confirm 값과 `userId`로 조회한 DB의 `users.role`을 기준으로 검증한다.
 
 `unit_setting` 예시:
 

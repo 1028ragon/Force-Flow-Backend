@@ -9,7 +9,8 @@
 4-A. 미리보기 그대로 승인
    또는
 4-B. 병사 수정 후 승인
-5. 날짜별 확정 근무표 조회
+5. 병사 이름 검색 후 userId 선택
+6. 날짜별 확정 근무표 조회
 ```
 
 `4-A`와 `4-B`는 둘 중 하나만 실행한다.
@@ -229,9 +230,6 @@ Content-Type: application/json
     {
       "slotOrder": 1,
       "userId": 35,
-      "unitId": 2,
-      "dutyDate": "2026-06-28",
-      "dutyType": "불침번",
       "startTime": "22:00:00",
       "endTime": "00:00:00",
       "aiReason": "AI 추천 배정"
@@ -239,9 +237,6 @@ Content-Type: application/json
     {
       "slotOrder": 2,
       "userId": 34,
-      "unitId": 2,
-      "dutyDate": "2026-06-28",
-      "dutyType": "불침번",
       "startTime": "00:00:00",
       "endTime": "02:00:00",
       "aiReason": "AI 추천 배정"
@@ -249,9 +244,6 @@ Content-Type: application/json
     {
       "slotOrder": 3,
       "userId": 38,
-      "unitId": 2,
-      "dutyDate": "2026-06-28",
-      "dutyType": "불침번",
       "startTime": "02:00:00",
       "endTime": "04:00:00",
       "aiReason": "AI 추천 배정"
@@ -259,9 +251,6 @@ Content-Type: application/json
     {
       "slotOrder": 4,
       "userId": 44,
-      "unitId": 2,
-      "dutyDate": "2026-06-28",
-      "dutyType": "불침번",
       "startTime": "04:00:00",
       "endTime": "06:00:00",
       "aiReason": "AI 추천 배정"
@@ -291,6 +280,8 @@ Content-Type: application/json
 
 `4-A` 대신 실행한다. `4-A`와 `4-B`를 같은 날짜에 둘 다 실행하면 같은 날짜에 승인 데이터가 중복으로 생긴다.
 
+병사를 수정할 때는 먼저 5번 후보 검색 API로 병사를 검색하고, 선택한 병사의 `userId`를 confirm에 넣는다.
+
 ### Request
 
 ```http
@@ -313,9 +304,6 @@ Content-Type: application/json
     {
       "slotOrder": 1,
       "userId": 43,
-      "unitId": 2,
-      "dutyDate": "2026-06-28",
-      "dutyType": "불침번",
       "startTime": "22:00:00",
       "endTime": "00:00:00",
       "aiReason": "관리자 수정 배정"
@@ -323,9 +311,6 @@ Content-Type: application/json
     {
       "slotOrder": 2,
       "userId": 34,
-      "unitId": 2,
-      "dutyDate": "2026-06-28",
-      "dutyType": "불침번",
       "startTime": "00:00:00",
       "endTime": "02:00:00",
       "aiReason": "AI 추천 배정"
@@ -333,9 +318,6 @@ Content-Type: application/json
     {
       "slotOrder": 3,
       "userId": 38,
-      "unitId": 2,
-      "dutyDate": "2026-06-28",
-      "dutyType": "불침번",
       "startTime": "02:00:00",
       "endTime": "04:00:00",
       "aiReason": "AI 추천 배정"
@@ -343,9 +325,6 @@ Content-Type: application/json
     {
       "slotOrder": 4,
       "userId": 44,
-      "unitId": 2,
-      "dutyDate": "2026-06-28",
-      "dutyType": "불침번",
       "startTime": "04:00:00",
       "endTime": "06:00:00",
       "aiReason": "AI 추천 배정"
@@ -371,7 +350,67 @@ Content-Type: application/json
 - 같은 userId를 두 슬롯에 중복 배정함
 - 해당 병사가 같은 날짜에 이미 승인된 근무가 있음
 
-## 5. 날짜별 확정 근무표 조회
+## 5. 병사 이름 검색 후 userId 선택
+
+프론트에서 이름으로 검색하고, 사용자가 선택한 병사의 `userId`를 confirm 요청에 넣기 위한 API다.
+
+### Request
+
+특정 slot 기준으로 검색:
+
+```http
+GET http://localhost:8080/api/work-schedules/candidates?unitId=2&dutyDate=2026-06-30&dutyType=불침번&slotOrder=1&keyword=배
+```
+
+전체 허용 역할 기준으로 검색:
+
+```http
+GET http://localhost:8080/api/work-schedules/candidates?unitId=2&dutyDate=2026-06-30&dutyType=불침번&keyword=배
+```
+
+### Response 확인
+
+```json
+{
+  "unitId": 2,
+  "dutyDate": "2026-06-30",
+  "dutyType": "불침번",
+  "slotOrder": 1,
+  "startTime": "22:00:00",
+  "endTime": "00:00:00",
+  "requiredCount": 1,
+  "allowedRoles": ["소총수", "취사병", "운전병"],
+  "candidates": [
+    {
+      "userId": 35,
+      "unitId": 5,
+      "name": "배지율",
+      "rankName": "일병",
+      "role": "소총수",
+      "currentStatus": "부대내",
+      "recentDutyCount": 1,
+      "workedYesterday": false,
+      "hasScheduleConflict": false,
+      "eligible": true
+    }
+  ]
+}
+```
+
+프론트 처리:
+
+- 화면에는 `name`, `rankName`, `role`, `currentStatus`를 보여준다.
+- 사용자가 병사를 선택하면 내부적으로 `userId`를 저장한다.
+- confirm 요청에는 선택한 병사의 `userId`를 넣는다.
+- 가능하면 `eligible=true`인 병사만 선택 가능하게 한다.
+
+주의:
+
+- 이름은 중복될 수 있으므로 confirm에 이름을 보내면 안 된다.
+- confirm에는 반드시 `userId`를 보내야 한다.
+- `slotOrder`를 보내면 해당 시간대의 `allowedRoles` 기준으로 후보가 필터링된다.
+
+## 6. 날짜별 확정 근무표 조회
 
 ### Request
 
