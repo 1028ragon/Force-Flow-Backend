@@ -8,24 +8,30 @@ import ForceFlow.Military.dto.responseDto.DutyAssignmentResponse;
 import ForceFlow.Military.entity.AiRecommendation;
 import ForceFlow.Military.entity.DutyAssignment;
 import ForceFlow.Military.entity.Unit;
-import ForceFlow.Military.entity.UnitSetting;
 import ForceFlow.Military.entity.User;
 import ForceFlow.Military.repository.AiRecommendationRepository;
 import ForceFlow.Military.repository.DutyAssignmentRepository;
 import ForceFlow.Military.repository.ScheduleRepository;
 import ForceFlow.Military.repository.UnitRepository;
-import ForceFlow.Military.repository.UnitSettingRepository;
 import ForceFlow.Military.repository.UserRepository;
 import ForceFlow.Military.workSchedule.constant.DutyStatus;
 import ForceFlow.Military.workSchedule.dto.WorkScheduleConfirmAssignmentRequest;
 import ForceFlow.Military.workSchedule.dto.WorkScheduleConfirmRequest;
+import ForceFlow.Military.workSchedule.dto.WorkScheduleAssignmentResponse;
+import ForceFlow.Military.workSchedule.dto.WorkScheduleDailyResponse;
 import ForceFlow.Military.workSchedule.dto.WorkSchedulePreviewAssignmentResponse;
 import ForceFlow.Military.workSchedule.dto.WorkSchedulePreviewResponse;
 import ForceFlow.Military.workSchedule.dto.internal.AiInternalRequest;
+import ForceFlow.Military.workSchedule.dto.internal.DutySlotBlock;
 import ForceFlow.Military.workSchedule.dto.internal.SoldierBlock;
+import ForceFlow.Military.workSchedule.entity.WorkScheduleSetting;
 import ForceFlow.Military.workSchedule.exception.WorkScheduleServiceException;
+import ForceFlow.Military.workSchedule.repository.WorkScheduleSettingRepository;
+import jakarta.persistence.EntityManager;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -46,11 +52,12 @@ public class AiRecommendationServiceImpl implements AiRecommendationService {
     private final AiRecommendationValidator aiRecommendationValidator;
     private final ObjectMapper objectMapper;
     private final UnitRepository unitRepository;
-    private final UnitSettingRepository unitSettingRepository;
+    private final WorkScheduleSettingRepository workScheduleSettingRepository;
     private final UserRepository userRepository;
     private final ScheduleRepository scheduleRepository;
     private final AiRecommendationRepository aiRecommendationRepository;
     private final DutyAssignmentRepository dutyAssignmentRepository;
+    private final EntityManager entityManager;
 
     @Override
     @Transactional
@@ -78,7 +85,10 @@ public class AiRecommendationServiceImpl implements AiRecommendationService {
     public AiRecommendationResponse confirmSchedule(WorkScheduleConfirmRequest request) {
         Unit unit = unitRepository.findById(request.unitId())
                 .orElseThrow(() -> new IllegalArgumentException("부대를 찾을 수 없습니다."));
-        UnitSetting setting = unitSettingRepository.findByUnitId(request.unitId())
+        WorkScheduleSetting setting = workScheduleSettingRepository.findByUnitIdAndDutyType(
+                        request.unitId(),
+                        request.dutyType()
+                )
                 .orElseThrow(() -> new IllegalArgumentException("부대 근무 설정을 찾을 수 없습니다."));
         validateConfirmRequest(request, setting);
 
@@ -98,6 +108,86 @@ public class AiRecommendationServiceImpl implements AiRecommendationService {
         List<DutyAssignment> savedAssignments = dutyAssignmentRepository.saveAll(assignments);
 
         return toAiRecommendationResponse(aiRecommendation, savedAssignments);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public WorkScheduleDailyResponse getDailySchedule(Long unitId, LocalDate dutyDate, String dutyType) {
+        if (!unitRepository.existsById(unitId)) {
+            throw new IllegalArgumentException("Unit not found.");
+        }
+
+        List<Long> unitIds = unitRepository.findAllSubUnitIds(unitId);
+        List<DutyAssignment> assignments = findLatestApprovedAssignments(unitIds, dutyDate, dutyType);
+        List<WorkScheduleAssignmentResponse> assignmentResponses = assignments.stream()
+                .map(this::toWorkScheduleAssignmentResponse)
+                .toList();
+
+        return new WorkScheduleDailyResponse(
+                unitId,
+                dutyDate,
+                dutyType,
+                assignmentResponses.size(),
+                assignmentResponses
+        );
+    }
+
+    private List<DutyAssignment> findLatestApprovedAssignments(
+            List<Long> unitIds,
+            LocalDate dutyDate,
+            String dutyType
+    ) {
+        Long recommendationId = findLatestApprovedRecommendationId(unitIds, dutyDate, dutyType);
+        if (recommendationId == null) {
+            return List.of();
+        }
+
+        String query = """
+                select d
+                from DutyAssignment d
+                join fetch d.user u
+                join fetch d.unit unit
+                where d.aiRecommendation.id = :recommendationId
+                order by d.startTime asc, u.rankName asc, u.name asc
+                """;
+
+        return entityManager.createQuery(query, DutyAssignment.class)
+                .setParameter("recommendationId", recommendationId)
+                .getResultList();
+    }
+
+    private Long findLatestApprovedRecommendationId(
+            List<Long> unitIds,
+            LocalDate dutyDate,
+            String dutyType
+    ) {
+        String query = """
+                select ar.id
+                from AiRecommendation ar
+                where ar.unit.id in :unitIds
+                  and ar.dutyDate = :dutyDate
+                  and ar.status = :status
+                """;
+
+        if (!isBlank(dutyType)) {
+            query += " and ar.dutyType = :dutyType";
+        }
+
+        query += " order by ar.id desc";
+
+        var typedQuery = entityManager.createQuery(query, Long.class)
+                .setParameter("unitIds", unitIds)
+                .setParameter("dutyDate", dutyDate)
+                .setParameter("status", DutyStatus.APPROVED)
+                .setMaxResults(1);
+
+        if (!isBlank(dutyType)) {
+            typedQuery.setParameter("dutyType", dutyType);
+        }
+
+        return typedQuery.getResultStream()
+                .findFirst()
+                .orElse(null);
     }
 
     private WorkSchedulePreviewResponse toPreviewResponse(
@@ -157,22 +247,34 @@ public class AiRecommendationServiceImpl implements AiRecommendationService {
     ) {
         Map<Long, SoldierBlock> soldiersByUserId = internalRequest.soldiers().stream()
                 .collect(Collectors.toMap(SoldierBlock::userId, Function.identity()));
+        List<PreviewSlot> slots = expandPreviewSlots(internalRequest);
+        List<AiRecommendedUser> remainingUsers = new ArrayList<>(recommendedUsers);
 
-        return recommendedUsers.stream()
-                .map(recommendedUser -> toPreviewAssignment(
+        List<WorkSchedulePreviewAssignmentResponse> assignments = new ArrayList<>();
+        for (PreviewSlot slot : slots) {
+            AiRecommendedUser recommendedUser = findAndRemoveRecommendedUserByAllowedRoles(
+                    remainingUsers,
+                    soldiersByUserId,
+                    slot.allowedRoles()
+            );
+            assignments.add(toPreviewAssignment(
                         internalRequest,
+                        slot,
                         recommendedUser,
                         soldiersByUserId.get(recommendedUser.userId())
-                ))
-                .toList();
+            ));
+        }
+        return assignments;
     }
 
     private WorkSchedulePreviewAssignmentResponse toPreviewAssignment(
             AiInternalRequest internalRequest,
+            PreviewSlot slot,
             AiRecommendedUser recommendedUser,
             SoldierBlock soldier
     ) {
         return new WorkSchedulePreviewAssignmentResponse(
+                slot.slotOrder(),
                 soldier.userId(),
                 internalRequest.unit().unitId(),
                 soldier.name(),
@@ -180,19 +282,51 @@ public class AiRecommendationServiceImpl implements AiRecommendationService {
                 soldier.role(),
                 internalRequest.duty().dutyDate(),
                 internalRequest.duty().dutyType(),
-                internalRequest.duty().startTime(),
-                internalRequest.duty().endTime(),
+                slot.startTime(),
+                slot.endTime(),
                 DutyStatus.PREVIEW,
                 recommendedUser.reason()
         );
     }
 
-    private void validateConfirmRequest(WorkScheduleConfirmRequest request, UnitSetting setting) {
+    private AiRecommendedUser findAndRemoveRecommendedUserByAllowedRoles(
+            List<AiRecommendedUser> recommendedUsers,
+            Map<Long, SoldierBlock> soldiersByUserId,
+            List<String> allowedRoles
+    ) {
+        for (int index = 0; index < recommendedUsers.size(); index++) {
+            AiRecommendedUser recommendedUser = recommendedUsers.get(index);
+            SoldierBlock soldier = soldiersByUserId.get(recommendedUser.userId());
+            if (soldier != null && allowedRoles.contains(soldier.role())) {
+                return recommendedUsers.remove(index);
+            }
+        }
+
+        throw new IllegalArgumentException("AI 추천 결과가 시간대별 허용 역할과 일치하지 않습니다.");
+    }
+
+    private List<PreviewSlot> expandPreviewSlots(AiInternalRequest internalRequest) {
+        return internalRequest.duty().timeSlots().stream()
+                .sorted(Comparator.comparing(DutySlotBlock::slotOrder))
+                .flatMap(slot -> java.util.stream.IntStream.range(0, slot.requiredCount())
+                        .mapToObj(index -> new PreviewSlot(
+                                slot.slotOrder(),
+                                slot.startTime(),
+                                slot.endTime(),
+                                slot.allowedRoles()
+                        )))
+                .toList();
+    }
+
+    private void validateConfirmRequest(WorkScheduleConfirmRequest request, WorkScheduleSetting setting) {
         if (!setting.getDutyType().equals(request.dutyType())) {
             throw new IllegalArgumentException("요청한 근무 유형과 부대 근무 설정이 일치하지 않습니다.");
         }
-        if (request.assignments().size() != request.requiredCount()) {
+        if (request.assignments().size() != setting.getRequiredCount()) {
             throw new IllegalArgumentException("승인 배정 인원 수가 필요 인원과 일치하지 않습니다.");
+        }
+        if (!setting.getRequiredCount().equals(request.requiredCount())) {
+            throw new IllegalArgumentException("요청 필요 인원과 부대 근무 설정 인원이 일치하지 않습니다.");
         }
         if (request.recommendationId() == null && isBlank(request.requestJson())) {
             throw new IllegalArgumentException("AI 내부 요청 JSON이 비어 있습니다.");
@@ -210,7 +344,7 @@ public class AiRecommendationServiceImpl implements AiRecommendationService {
 
     private void validateConfirmAssignments(
             WorkScheduleConfirmRequest request,
-            UnitSetting setting,
+            WorkScheduleSetting setting,
             Map<Long, User> usersById,
             Set<Long> allowedUnitIds
     ) {
@@ -218,8 +352,11 @@ public class AiRecommendationServiceImpl implements AiRecommendationService {
                 .map(String::trim)
                 .collect(Collectors.toSet());
         Set<Long> seenUserIds = new HashSet<>();
+        Map<SlotKey, SlotRequirement> slotRequirements = getSlotRequirements(setting);
+        Map<SlotKey, Integer> assignedCounts = new java.util.HashMap<>();
 
         for (WorkScheduleConfirmAssignmentRequest assignment : request.assignments()) {
+            User user = usersById.get(assignment.userId());
             validateConfirmAssignment(
                     request,
                     assignment,
@@ -229,13 +366,44 @@ public class AiRecommendationServiceImpl implements AiRecommendationService {
                     excludedStatuses,
                     seenUserIds
             );
+            SlotKey key = SlotKey.from(assignment);
+            SlotRequirement requirement = slotRequirements.get(key);
+            if (requirement == null || !requirement.allowedRoles().contains(user.getRole())) {
+                throw new IllegalArgumentException("승인 배정의 시간대별 허용 역할이 부대 근무 설정과 일치하지 않습니다.");
+            }
+            assignedCounts.merge(key, 1, Integer::sum);
         }
+
+        for (Map.Entry<SlotKey, SlotRequirement> entry : slotRequirements.entrySet()) {
+            int assignedCount = assignedCounts.getOrDefault(entry.getKey(), 0);
+            if (assignedCount != entry.getValue().requiredCount()) {
+                throw new IllegalArgumentException("승인 배정의 시간대별 필요 인원이 부대 근무 설정과 일치하지 않습니다.");
+            }
+        }
+    }
+
+    private Map<SlotKey, SlotRequirement> getSlotRequirements(WorkScheduleSetting setting) {
+        return setting.getTimeSlots().stream()
+                .map(slot -> Map.entry(
+                        new SlotKey(
+                                slot.getSlotOrder(),
+                                slot.getStartTime(),
+                                slot.getEndTime()
+                        ),
+                        new SlotRequirement(
+                                slot.getRequiredCount(),
+                                slot.getAllowedRoles().stream()
+                                        .map(role -> role.getRole())
+                                        .collect(Collectors.toSet())
+                        )
+                ))
+                .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
     }
 
     private void validateConfirmAssignment(
             WorkScheduleConfirmRequest request,
             WorkScheduleConfirmAssignmentRequest assignment,
-            UnitSetting setting,
+            WorkScheduleSetting setting,
             Map<Long, User> usersById,
             Set<Long> allowedUnitIds,
             Set<String> excludedStatuses,
@@ -257,7 +425,7 @@ public class AiRecommendationServiceImpl implements AiRecommendationService {
         if (!allowedUnitIds.contains(user.getUnit().getId())) {
             throw new IllegalArgumentException("요청 부대 소속이 아닌 병사가 포함되어 있습니다.");
         }
-        if (!assignment.role().equals(user.getRole())) {
+        if (!isBlank(assignment.role()) && !assignment.role().equals(user.getRole())) {
             throw new IllegalArgumentException("병사 역할과 배정 역할이 일치하지 않습니다.");
         }
         if (excludedStatuses.contains(user.getCurrentStatus())) {
@@ -330,7 +498,6 @@ public class AiRecommendationServiceImpl implements AiRecommendationService {
         AiRecommendation aiRecommendation = aiRecommendationRepository.findById(request.recommendationId())
                 .orElseThrow(() -> new IllegalArgumentException("AI 추천 기록을 찾을 수 없습니다."));
         validateRecommendationMatchesRequest(aiRecommendation, request);
-        validateConfirmAssignmentsMatchPreview(aiRecommendation, request);
         return aiRecommendationRepository.save(toApprovedRecommendation(aiRecommendation));
     }
 
@@ -363,35 +530,6 @@ public class AiRecommendationServiceImpl implements AiRecommendationService {
         }
         if (DutyStatus.APPROVED.equals(aiRecommendation.getStatus())) {
             throw new IllegalArgumentException("이미 승인된 AI 추천 기록입니다.");
-        }
-    }
-
-    private void validateConfirmAssignmentsMatchPreview(
-            AiRecommendation aiRecommendation,
-            WorkScheduleConfirmRequest request
-    ) {
-        AiModelResponse aiResponse = readAiModelResponse(aiRecommendation.getResponseJson());
-        Set<Long> previewUserIds = aiResponse.recommendedUsers().stream()
-                .map(AiRecommendedUser::userId)
-                .collect(Collectors.toSet());
-        Set<Long> confirmUserIds = request.assignments().stream()
-                .map(WorkScheduleConfirmAssignmentRequest::userId)
-                .collect(Collectors.toSet());
-
-        if (!previewUserIds.equals(confirmUserIds)) {
-            throw new IllegalArgumentException("확정 배정 인원이 미리보기 추천 결과와 일치하지 않습니다.");
-        }
-    }
-
-    private AiModelResponse readAiModelResponse(String responseJson) {
-        if (isBlank(responseJson)) {
-            throw new IllegalArgumentException("AI 추천 응답 JSON이 비어 있습니다.");
-        }
-
-        try {
-            return objectMapper.readValue(responseJson, AiModelResponse.class);
-        } catch (Exception exception) {
-            throw new WorkScheduleServiceException("AI 추천 응답 JSON 처리에 실패했습니다.", exception);
         }
     }
 
@@ -455,6 +593,25 @@ public class AiRecommendationServiceImpl implements AiRecommendationService {
         );
     }
 
+    private WorkScheduleAssignmentResponse toWorkScheduleAssignmentResponse(DutyAssignment assignment) {
+        return new WorkScheduleAssignmentResponse(
+                assignment.getId(),
+                assignment.getUser().getId(),
+                assignment.getUnit().getId(),
+                assignment.getUser().getName(),
+                assignment.getUser().getRankName(),
+                assignment.getUser().getRole(),
+                assignment.getDutyDate(),
+                assignment.getDutyType(),
+                assignment.getStartTime(),
+                assignment.getEndTime(),
+                assignment.getStatus(),
+                assignment.getAiReason(),
+                assignment.getApprovedAt(),
+                assignment.getCreatedAt()
+        );
+    }
+
     private String writeJson(Object value) {
         try {
             return objectMapper.writeValueAsString(value);
@@ -465,5 +622,34 @@ public class AiRecommendationServiceImpl implements AiRecommendationService {
 
     private boolean isBlank(String value) {
         return value == null || value.isBlank();
+    }
+
+    private record SlotKey(
+            Integer slotOrder,
+            java.time.LocalTime startTime,
+            java.time.LocalTime endTime
+    ) {
+
+        static SlotKey from(WorkScheduleConfirmAssignmentRequest assignment) {
+            return new SlotKey(
+                    assignment.slotOrder(),
+                    assignment.startTime(),
+                    assignment.endTime()
+            );
+        }
+    }
+
+    private record SlotRequirement(
+            Integer requiredCount,
+            Set<String> allowedRoles
+    ) {
+    }
+
+    private record PreviewSlot(
+            Integer slotOrder,
+            java.time.LocalTime startTime,
+            java.time.LocalTime endTime,
+            List<String> allowedRoles
+    ) {
     }
 }

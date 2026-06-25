@@ -1,10 +1,11 @@
 package ForceFlow.Military.workSchedule.dto;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.time.LocalTime;
 
-public record WorkSchedulePreviewAssignmentResponse(
-        Integer slotOrder,
+public record WorkScheduleAssignmentResponse(
+        Long dutyId,
         Long userId,
         Long unitId,
         String name,
@@ -15,6 +16,8 @@ public record WorkSchedulePreviewAssignmentResponse(
         LocalTime startTime,
         LocalTime endTime,
         String status,
-        String aiReason
+        String aiReason,
+        LocalDateTime approvedAt,
+        LocalDateTime createdAt
 ) {
 }

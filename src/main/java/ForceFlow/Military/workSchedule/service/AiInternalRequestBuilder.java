@@ -2,22 +2,25 @@ package ForceFlow.Military.workSchedule.service;
 
 import ForceFlow.Military.dto.requestDto.AiRecommendationCreateRequest;
 import ForceFlow.Military.entity.Unit;
-import ForceFlow.Military.entity.UnitSetting;
 import ForceFlow.Military.entity.User;
 import ForceFlow.Military.repository.DutyAssignmentRepository;
 import ForceFlow.Military.repository.ScheduleRepository;
 import ForceFlow.Military.repository.UnitRepository;
-import ForceFlow.Military.repository.UnitSettingRepository;
 import ForceFlow.Military.repository.UserRepository;
 import ForceFlow.Military.workSchedule.constant.DutyStatus;
 import ForceFlow.Military.workSchedule.dto.internal.AiInternalRequest;
 import ForceFlow.Military.workSchedule.dto.internal.DutyBlock;
+import ForceFlow.Military.workSchedule.dto.internal.DutySlotBlock;
 import ForceFlow.Military.workSchedule.dto.internal.RuleBlock;
 import ForceFlow.Military.workSchedule.dto.internal.SoldierBlock;
 import ForceFlow.Military.workSchedule.dto.internal.UnitBlock;
+import ForceFlow.Military.workSchedule.entity.WorkScheduleSetting;
+import ForceFlow.Military.workSchedule.entity.WorkScheduleTimeSlot;
+import ForceFlow.Military.workSchedule.repository.WorkScheduleSettingRepository;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
+import java.util.Comparator;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -35,7 +38,7 @@ import org.springframework.transaction.annotation.Transactional;
 public class AiInternalRequestBuilder {
 
     private final UnitRepository unitRepository;
-    private final UnitSettingRepository unitSettingRepository;
+    private final WorkScheduleSettingRepository workScheduleSettingRepository;
     private final UserRepository userRepository;
     private final ScheduleRepository scheduleRepository;
     private final DutyAssignmentRepository dutyAssignmentRepository;
@@ -43,7 +46,10 @@ public class AiInternalRequestBuilder {
     public AiInternalRequest build(AiRecommendationCreateRequest request) {
         Unit unit = unitRepository.findById(request.unitId())
                 .orElseThrow(() -> new IllegalArgumentException("부대를 찾을 수 없습니다."));
-        UnitSetting setting = unitSettingRepository.findByUnitId(request.unitId())
+        WorkScheduleSetting setting = workScheduleSettingRepository.findByUnitIdAndDutyType(
+                        request.unitId(),
+                        request.dutyType()
+                )
                 .orElseThrow(() -> new IllegalArgumentException("부대 근무 설정을 찾을 수 없습니다."));
         if (!setting.getDutyType().equals(request.dutyType())) {
             throw new IllegalArgumentException("요청한 근무 유형과 부대 근무 설정이 일치하지 않습니다.");
@@ -61,7 +67,7 @@ public class AiInternalRequestBuilder {
         );
     }
 
-    private List<SoldierBlock> buildSoldiers(List<User> users, LocalDate dutyDate, UnitSetting setting) {
+    private List<SoldierBlock> buildSoldiers(List<User> users, LocalDate dutyDate, WorkScheduleSetting setting) {
         if (users.isEmpty()) {
             return List.of();
         }
@@ -111,7 +117,7 @@ public class AiInternalRequestBuilder {
             Set<Long> conflictUserIds,
             Set<Long> workedYesterdayUserIds,
             Map<Long, Integer> recentDutyCounts,
-            UnitSetting setting
+            WorkScheduleSetting setting
     ) {
         Long userId = user.getId();
         Integer recentDutyCount = recentDutyCounts.getOrDefault(userId, 0);
@@ -145,7 +151,7 @@ public class AiInternalRequestBuilder {
             Boolean workedYesterday,
             Boolean hasScheduleConflict,
             Set<String> excludedStatuses,
-            UnitSetting setting
+            WorkScheduleSetting setting
     ) {
         if (excludedStatuses.contains(user.getCurrentStatus())) {
             return false;
@@ -189,17 +195,33 @@ public class AiInternalRequestBuilder {
         );
     }
 
-    private DutyBlock toDutyBlock(AiRecommendationCreateRequest request, UnitSetting setting) {
+    private DutyBlock toDutyBlock(AiRecommendationCreateRequest request, WorkScheduleSetting setting) {
         return new DutyBlock(
                 request.dutyDate(),
                 request.dutyType(),
                 setting.getRequiredCount(),
                 setting.getStartTime(),
-                setting.getEndTime()
+                setting.getEndTime(),
+                toDutySlots(setting)
         );
     }
 
-    private RuleBlock toRuleBlock(UnitSetting setting) {
+    private List<DutySlotBlock> toDutySlots(WorkScheduleSetting setting) {
+        return setting.getTimeSlots().stream()
+                .sorted(Comparator.comparing(WorkScheduleTimeSlot::getSlotOrder))
+                .map(slot -> new DutySlotBlock(
+                        slot.getSlotOrder(),
+                        slot.getStartTime(),
+                        slot.getEndTime(),
+                        slot.getRequiredCount(),
+                        slot.getAllowedRoles().stream()
+                                .map(role -> role.getRole())
+                                .toList()
+                ))
+                .toList();
+    }
+
+    private RuleBlock toRuleBlock(WorkScheduleSetting setting) {
         return new RuleBlock(
                 setting.getLookbackDays(),
                 setting.getPreventConsecutive(),

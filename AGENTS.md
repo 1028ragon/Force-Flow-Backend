@@ -28,6 +28,7 @@
 
 - `POST /api/work-schedules/preview`
 - `POST /api/work-schedules/confirm`
+- `GET /api/work-schedules?unitId={unitId}&dutyDate={yyyy-MM-dd}`
 - `GET /api/work-schedules/units/{unitId}/setting`
 - `PUT /api/work-schedules/units/{unitId}/setting`
 
@@ -40,6 +41,140 @@ Preview 요청 예시:
   "dutyType": "불침번"
 }
 ```
+
+## 추가된 날짜별 근무표 조회 API
+
+프론트에서 날짜를 선택했을 때 기존에 확정 저장된 근무표를 조회하기 위한 API가 추가되어 있다.
+
+- `GET /api/work-schedules?unitId={unitId}&dutyDate={yyyy-MM-dd}`
+- `GET /api/work-schedules?unitId={unitId}&dutyDate={yyyy-MM-dd}&dutyType={dutyType}`
+
+예시:
+
+```http
+GET http://localhost:8080/api/work-schedules?unitId=2&dutyDate=2026-06-27&dutyType=불침번
+```
+
+Postman Params 예시:
+
+```text
+unitId=2
+dutyDate=2026-06-27
+dutyType=불침번
+```
+
+`dutyType`은 선택값이다. 생략하면 해당 날짜의 모든 확정 근무를 조회한다.
+
+응답 예시:
+
+```json
+{
+  "unitId": 2,
+  "dutyDate": "2026-06-27",
+  "dutyType": "불침번",
+  "assignmentCount": 4,
+  "assignments": [
+    {
+      "dutyId": 7,
+      "userId": 10,
+      "unitId": 2,
+      "name": "홍길동",
+      "rankName": "상병",
+      "role": "소총수",
+      "dutyDate": "2026-06-27",
+      "dutyType": "불침번",
+      "startTime": "22:00:00",
+      "endTime": "06:30:00",
+      "status": "승인",
+      "aiReason": "최근 근무 횟수가 적고 제외 상태가 아님",
+      "approvedAt": "2026-06-25T14:00:00",
+      "createdAt": "2026-06-25T14:00:00"
+    }
+  ]
+}
+```
+
+해당 날짜에 확정된 근무가 없으면 `assignmentCount`는 `0`, `assignments`는 빈 배열이다.
+
+현재 근무표 생성 흐름은 다음과 같다.
+
+```text
+날짜 선택
+→ POST /api/work-schedules/preview
+→ AI 추천 생성 및 ai_recommendation 미리보기 기록 저장
+→ recommendationId와 assignments 반환
+→ POST /api/work-schedules/confirm
+→ duty_assignment에 승인 근무 저장
+→ GET /api/work-schedules로 날짜별 기존 근무표 조회
+```
+
+## 슬롯 기반 부대 근무 초기설정
+
+부대 근무 초기설정은 `workSchedule` 전용 테이블 기준으로 확장했다. 공통 Entity 파일은 수정하지 않는다.
+
+추가된 전용 테이블:
+
+- `work_schedule_setting`
+- `work_schedule_time_slot`
+- `work_schedule_slot_role`
+
+설정 저장 API:
+
+```http
+PUT http://localhost:8080/api/work-schedules/units/2/setting
+Content-Type: application/json
+```
+
+요청 예시:
+
+```json
+{
+  "dutyType": "불침번",
+  "description": "생활관 야간 경계 근무",
+  "timeSlots": [
+    {
+      "slotOrder": 1,
+      "startTime": "22:00:00",
+      "endTime": "00:00:00",
+      "requiredCount": 1,
+      "allowedRoles": ["소총수", "취사병", "운전병"]
+    },
+    {
+      "slotOrder": 2,
+      "startTime": "00:00:00",
+      "endTime": "02:00:00",
+      "requiredCount": 1,
+      "allowedRoles": ["소총수", "취사병", "운전병"]
+    },
+    {
+      "slotOrder": 3,
+      "startTime": "02:00:00",
+      "endTime": "04:00:00",
+      "requiredCount": 1,
+      "allowedRoles": ["소총수", "취사병", "운전병"]
+    },
+    {
+      "slotOrder": 4,
+      "startTime": "04:00:00",
+      "endTime": "06:00:00",
+      "requiredCount": 1,
+      "allowedRoles": ["소총수", "취사병", "운전병"]
+    }
+  ],
+  "lookbackDays": 7,
+  "preventConsecutive": true,
+  "maxDutyCount": 5,
+  "excludeStatuses": ["휴가", "외출", "외박", "교육", "훈련", "입원", "외진"]
+}
+```
+
+전체 `requiredCount`, 전체 `startTime`, 전체 `endTime`은 프론트가 직접 보내지 않는다. 백엔드는 `timeSlots` 기준으로 다음 값을 계산한다.
+
+- 전체 필요 인원: 모든 `timeSlots.requiredCount` 합계
+- 전체 시작 시간: 가장 앞 `slotOrder`의 `startTime`
+- 전체 종료 시간: 가장 뒤 `slotOrder`의 `endTime`
+
+`POST /api/work-schedules/preview`는 저장된 슬롯 설정을 읽어 초번별 `slotOrder`, `startTime`, `endTime`, `requiredCount`, `allowedRoles` 조건에 맞춰 추천 결과를 만든다. `POST /api/work-schedules/confirm`은 프론트가 보낸 초번별 배정이 설정의 시간대별 필요 인원과 허용 역할에 맞는지 검증한 뒤 `duty_assignment`에 병사별 실제 분할 시간으로 저장한다.
 
 Confirm 요청은 `/preview` 응답의 `assignments`, `requestJson`, `responseJson`을 기반으로 만든다.
 현재 구현은 `/preview`가 `ai_recommendation` 기록을 먼저 저장하고 `recommendationId`를 반환한다. `/confirm`은 `recommendationId`와 `assignments`만으로 확정할 수 있으며, 프론트가 `requestJson`, `responseJson`을 직접 관리하지 않아도 된다.

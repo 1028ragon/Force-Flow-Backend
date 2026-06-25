@@ -3,13 +3,18 @@ package ForceFlow.Military.workSchedule.controller;
 import ForceFlow.Military.dto.requestDto.AiRecommendationCreateRequest;
 import ForceFlow.Military.dto.requestDto.AiRecommendationResponse;
 import ForceFlow.Military.workSchedule.dto.WorkScheduleConfirmRequest;
+import ForceFlow.Military.workSchedule.dto.WorkScheduleDailyResponse;
 import ForceFlow.Military.workSchedule.dto.WorkSchedulePreviewResponse;
 import ForceFlow.Military.workSchedule.service.AiRecommendationService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import java.time.LocalDate;
+import org.springframework.format.annotation.DateTimeFormat;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
@@ -18,6 +23,15 @@ import org.springframework.web.bind.annotation.RestController;
 public class AiRecommendationController {
 
     private final AiRecommendationService aiRecommendationService;
+
+    @GetMapping
+    public WorkScheduleDailyResponse getDailySchedule(
+            @RequestParam Long unitId,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate dutyDate,
+            @RequestParam(required = false) String dutyType
+    ) {
+        return aiRecommendationService.getDailySchedule(unitId, dutyDate, dutyType);
+    }
 
     @PostMapping("/preview")
     public WorkSchedulePreviewResponse previewSchedule(
