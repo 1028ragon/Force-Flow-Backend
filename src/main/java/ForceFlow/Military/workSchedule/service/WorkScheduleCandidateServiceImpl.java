@@ -1,5 +1,6 @@
 package ForceFlow.Military.workSchedule.service;
 
+import ForceFlow.Military.entity.DutyAssignment;
 import ForceFlow.Military.entity.User;
 import ForceFlow.Military.repository.DutyAssignmentRepository;
 import ForceFlow.Military.repository.ScheduleRepository;
@@ -11,6 +12,7 @@ import ForceFlow.Military.workSchedule.dto.WorkScheduleCandidateSearchResponse;
 import ForceFlow.Military.workSchedule.entity.WorkScheduleSetting;
 import ForceFlow.Military.workSchedule.entity.WorkScheduleTimeSlot;
 import ForceFlow.Military.workSchedule.repository.WorkScheduleSettingRepository;
+import jakarta.persistence.EntityManager;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
@@ -36,6 +38,8 @@ public class WorkScheduleCandidateServiceImpl implements WorkScheduleCandidateSe
     private final ScheduleRepository scheduleRepository;
     private final DutyAssignmentRepository dutyAssignmentRepository;
     private final WorkScheduleSettingRepository workScheduleSettingRepository;
+    private final WorkScheduleDutyFatigueCalculator dutyFatigueCalculator;
+    private final EntityManager entityManager;
 
     @Override
     @Transactional(readOnly = true)
@@ -111,6 +115,7 @@ public class WorkScheduleCandidateServiceImpl implements WorkScheduleCandidateSe
                 DutyStatus.APPROVED
         ));
         Map<Long, Integer> recentDutyCounts = getRecentDutyCounts(userIds, lookbackStartDate, dutyDate);
+        Map<Long, Integer> recentDutyFatigueScores = getRecentDutyFatigueScores(userIds, lookbackStartDate, dutyDate);
         String normalizedKeyword = keyword == null ? "" : keyword.trim().toLowerCase(Locale.ROOT);
 
         return users.stream()
@@ -123,10 +128,12 @@ public class WorkScheduleCandidateServiceImpl implements WorkScheduleCandidateSe
                         conflictUserIds,
                         workedYesterdayUserIds,
                         recentDutyCounts,
+                        recentDutyFatigueScores,
                         setting
                 ))
                 .sorted(Comparator
                         .comparing(WorkScheduleCandidateResponse::eligible).reversed()
+                        .thenComparing(WorkScheduleCandidateResponse::recentDutyFatigueScore)
                         .thenComparing(WorkScheduleCandidateResponse::recentDutyCount)
                         .thenComparing(WorkScheduleCandidateResponse::rankName)
                         .thenComparing(WorkScheduleCandidateResponse::name))
@@ -139,9 +146,11 @@ public class WorkScheduleCandidateServiceImpl implements WorkScheduleCandidateSe
             Set<Long> conflictUserIds,
             Set<Long> workedYesterdayUserIds,
             Map<Long, Integer> recentDutyCounts,
+            Map<Long, Integer> recentDutyFatigueScores,
             WorkScheduleSetting setting
     ) {
         Integer recentDutyCount = recentDutyCounts.getOrDefault(user.getId(), 0);
+        Integer recentDutyFatigueScore = recentDutyFatigueScores.getOrDefault(user.getId(), 0);
         Boolean workedYesterday = workedYesterdayUserIds.contains(user.getId());
         Boolean hasScheduleConflict = conflictUserIds.contains(user.getId());
         Boolean eligible = isEligible(
@@ -161,6 +170,7 @@ public class WorkScheduleCandidateServiceImpl implements WorkScheduleCandidateSe
                 user.getRole(),
                 user.getCurrentStatus(),
                 recentDutyCount,
+                recentDutyFatigueScore,
                 workedYesterday,
                 hasScheduleConflict,
                 eligible
@@ -219,6 +229,37 @@ public class WorkScheduleCandidateServiceImpl implements WorkScheduleCandidateSe
                 ));
 
         return dutyCounts;
+    }
+
+    private Map<Long, Integer> getRecentDutyFatigueScores(
+            List<Long> userIds,
+            LocalDate startDate,
+            LocalDate endDate
+    ) {
+        Map<Long, Integer> fatigueScores = new HashMap<>();
+        List<DutyAssignment> assignments = entityManager.createQuery("""
+                        select d
+                        from DutyAssignment d
+                        join fetch d.user u
+                        where u.id in :userIds
+                          and d.dutyDate between :startDate and :endDate
+                          and d.status = :status
+                        """, DutyAssignment.class)
+                .setParameter("userIds", userIds)
+                .setParameter("startDate", startDate)
+                .setParameter("endDate", endDate)
+                .setParameter("status", DutyStatus.APPROVED)
+                .getResultList();
+
+        for (DutyAssignment assignment : assignments) {
+            fatigueScores.merge(
+                    assignment.getUser().getId(),
+                    dutyFatigueCalculator.calculate(assignment.getStartTime(), assignment.getEndTime()),
+                    Integer::sum
+            );
+        }
+
+        return fatigueScores;
     }
 
     private LocalDateTime resolveDutyEndAt(LocalDate dutyDate, LocalTime startTime, LocalTime endTime) {

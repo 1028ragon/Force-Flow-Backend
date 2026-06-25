@@ -12,6 +12,18 @@ http://localhost:8080
 - `dutyDate`는 `yyyy-MM-dd` 형식이다.
 - `role`은 confirm 요청에서 생략 가능하다. 백엔드가 `userId`로 DB의 실제 역할을 조회한다.
 - `requestJson`, `responseJson`은 백엔드 DB 기록용이며 preview 응답에는 내려주지 않는다.
+- 공정성은 최근 근무 횟수(`recentDutyCount`)와 최근 근무 피로도 점수(`recentDutyFatigueScore`)를 함께 사용한다.
+
+피로도 점수 기준:
+
+```text
+00:00 ~ 06:00 포함: 4점
+22:00 ~ 24:00 포함: 3점
+18:00 ~ 22:00 포함: 2점
+그 외 주간: 1점
+```
+
+피로도 점수는 Entity를 추가하지 않고 확정 근무 이력의 `startTime`, `endTime` 기준으로 계산한다.
 
 ## 1. 부대 근무 초기설정 저장
 
@@ -189,6 +201,8 @@ Response:
 - preview 호출 시 `ai_recommendation` 기록이 먼저 저장되고 `recommendationId`가 반환된다.
 - 프론트는 confirm 시 `recommendationId`를 사용한다.
 - `assignments[].slotOrder`, `startTime`, `endTime`은 초기설정의 slot 기준으로 내려간다.
+- AI 추천 시 `recentDutyFatigueScore`가 낮은 병사를 우선 추천하도록 요청한다.
+- 같은 시간대(timeSlot)에 `rankName`이 `이병`인 병사는 1명만 배정하도록 요청한다.
 
 ## 4. 병사 후보 검색
 
@@ -235,6 +249,7 @@ Response:
       "role": "소총수",
       "currentStatus": "부대내",
       "recentDutyCount": 1,
+      "recentDutyFatigueScore": 3,
       "workedYesterday": false,
       "hasScheduleConflict": false,
       "eligible": true
@@ -245,10 +260,11 @@ Response:
 
 프론트 처리:
 
-- 화면에는 `name`, `rankName`, `role`, `currentStatus`, `eligible`을 표시한다.
+- 화면에는 `name`, `rankName`, `role`, `currentStatus`, `recentDutyCount`, `recentDutyFatigueScore`, `eligible`을 표시한다.
 - 사용자가 병사를 선택하면 `userId`를 저장한다.
 - confirm 요청에는 이름이 아니라 `userId`를 보낸다.
 - `eligible=false`인 병사는 선택 불가 처리하는 것을 권장한다.
+- 후보 목록은 `eligible=true` 우선, `recentDutyFatigueScore` 낮은 순, `recentDutyCount` 낮은 순으로 정렬된다.
 
 ## 5. 미리보기 승인
 
@@ -318,6 +334,7 @@ Response:
 - 일정 충돌 병사는 승인할 수 없다.
 - 같은 날짜에 이미 승인된 근무가 있는 병사는 승인할 수 없다.
 - `preventConsecutive=true`이면 전날 승인 근무자는 승인할 수 없다.
+- 같은 시간대에 `rankName`이 `이병`인 병사는 2명 이상 승인할 수 없다.
 
 ## 6. 날짜별 확정 근무표 조회
 

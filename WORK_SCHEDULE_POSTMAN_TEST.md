@@ -35,6 +35,16 @@ http://localhost:8080
 
 불침번 시간대 분할, 시간대별 필요 역할/인원, 제외 상태, 공정성 규칙을 저장한다.
 
+공정성은 최근 근무 횟수뿐 아니라 최근 근무 시간대의 피로도 점수도 함께 반영한다.
+피로도 점수는 Entity를 추가하지 않고 기존 확정 근무 이력의 `startTime`, `endTime`으로 계산한다.
+
+```text
+00:00 ~ 06:00 포함: 4점
+22:00 ~ 24:00 포함: 3점
+18:00 ~ 22:00 포함: 2점
+그 외 주간: 1점
+```
+
 ### Request
 
 ```http
@@ -188,6 +198,8 @@ Content-Type: application/json
   - `00:00:00` ~ `02:00:00`
   - `02:00:00` ~ `04:00:00`
   - `04:00:00` ~ `06:00:00`
+- AI 추천은 `recentDutyFatigueScore`가 낮은 병사를 우선하도록 요청됨
+- 같은 시간대에 `rankName`이 `이병`인 병사는 1명만 배정됨
 
 다음 단계에서 사용할 값:
 
@@ -343,12 +355,14 @@ Content-Type: application/json
 - 제외 상태가 아님
 - 일정 충돌이 없음
 - 같은 날짜에 이미 승인된 근무가 없음
+- 같은 시간대에 이병이 2명 이상 배정되지 않음
 
 실패하는 경우:
 
 - 1번초의 `allowedRoles`에 없는 role의 userId를 넣음
 - 같은 userId를 두 슬롯에 중복 배정함
 - 해당 병사가 같은 날짜에 이미 승인된 근무가 있음
+- 같은 시간대에 이병 2명을 배정함
 
 ## 5. 병사 이름 검색 후 userId 선택
 
@@ -389,6 +403,7 @@ GET http://localhost:8080/api/work-schedules/candidates?unitId=2&dutyDate=2026-0
       "role": "소총수",
       "currentStatus": "부대내",
       "recentDutyCount": 1,
+      "recentDutyFatigueScore": 3,
       "workedYesterday": false,
       "hasScheduleConflict": false,
       "eligible": true
@@ -400,6 +415,8 @@ GET http://localhost:8080/api/work-schedules/candidates?unitId=2&dutyDate=2026-0
 프론트 처리:
 
 - 화면에는 `name`, `rankName`, `role`, `currentStatus`를 보여준다.
+- `recentDutyFatigueScore`는 최근 피로도 점수이며 낮을수록 최근 힘든 시간대 근무가 적었다는 뜻이다.
+- 후보 목록은 `eligible=true` 우선, 그다음 `recentDutyFatigueScore` 낮은 순, `recentDutyCount` 낮은 순으로 정렬된다.
 - 사용자가 병사를 선택하면 내부적으로 `userId`를 저장한다.
 - confirm 요청에는 선택한 병사의 `userId`를 넣는다.
 - 가능하면 `eligible=true`인 병사만 선택 가능하게 한다.
@@ -409,6 +426,7 @@ GET http://localhost:8080/api/work-schedules/candidates?unitId=2&dutyDate=2026-0
 - 이름은 중복될 수 있으므로 confirm에 이름을 보내면 안 된다.
 - confirm에는 반드시 `userId`를 보내야 한다.
 - `slotOrder`를 보내면 해당 시간대의 `allowedRoles` 기준으로 후보가 필터링된다.
+- 같은 시간대에 이병은 1명만 배정 가능하므로, 프론트 수정 시 같은 slot에 이병 2명을 넣지 않도록 처리하는 것이 좋다.
 
 ## 6. 날짜별 확정 근무표 조회
 

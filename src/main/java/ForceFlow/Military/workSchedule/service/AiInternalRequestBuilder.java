@@ -1,6 +1,7 @@
 package ForceFlow.Military.workSchedule.service;
 
 import ForceFlow.Military.dto.requestDto.AiRecommendationCreateRequest;
+import ForceFlow.Military.entity.DutyAssignment;
 import ForceFlow.Military.entity.Unit;
 import ForceFlow.Military.entity.User;
 import ForceFlow.Military.repository.DutyAssignmentRepository;
@@ -17,6 +18,7 @@ import ForceFlow.Military.workSchedule.dto.internal.UnitBlock;
 import ForceFlow.Military.workSchedule.entity.WorkScheduleSetting;
 import ForceFlow.Military.workSchedule.entity.WorkScheduleTimeSlot;
 import ForceFlow.Military.workSchedule.repository.WorkScheduleSettingRepository;
+import jakarta.persistence.EntityManager;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
@@ -42,6 +44,8 @@ public class AiInternalRequestBuilder {
     private final UserRepository userRepository;
     private final ScheduleRepository scheduleRepository;
     private final DutyAssignmentRepository dutyAssignmentRepository;
+    private final WorkScheduleDutyFatigueCalculator dutyFatigueCalculator;
+    private final EntityManager entityManager;
 
     public AiInternalRequest build(AiRecommendationCreateRequest request) {
         Unit unit = unitRepository.findById(request.unitId())
@@ -98,6 +102,11 @@ public class AiInternalRequestBuilder {
                 lookbackStartDate,
                 dutyDate
         );
+        Map<Long, Integer> recentDutyFatigueScores = getRecentDutyFatigueScores(
+                userIds,
+                lookbackStartDate,
+                dutyDate
+        );
 
         return users.stream()
                 .map(user -> toSoldierBlock(
@@ -106,6 +115,7 @@ public class AiInternalRequestBuilder {
                         conflictUserIds,
                         workedYesterdayUserIds,
                         recentDutyCounts,
+                        recentDutyFatigueScores,
                         setting
                 ))
                 .toList();
@@ -117,10 +127,12 @@ public class AiInternalRequestBuilder {
             Set<Long> conflictUserIds,
             Set<Long> workedYesterdayUserIds,
             Map<Long, Integer> recentDutyCounts,
+            Map<Long, Integer> recentDutyFatigueScores,
             WorkScheduleSetting setting
     ) {
         Long userId = user.getId();
         Integer recentDutyCount = recentDutyCounts.getOrDefault(userId, 0);
+        Integer recentDutyFatigueScore = recentDutyFatigueScores.getOrDefault(userId, 0);
         Boolean workedYesterday = workedYesterdayUserIds.contains(userId);
         Boolean hasScheduleConflict = conflictUserIds.contains(userId);
         Boolean eligible = isEligible(
@@ -139,6 +151,7 @@ public class AiInternalRequestBuilder {
                 user.getRole(),
                 user.getCurrentStatus(),
                 recentDutyCount,
+                recentDutyFatigueScore,
                 workedYesterday,
                 hasScheduleConflict,
                 eligible
@@ -183,6 +196,37 @@ public class AiInternalRequestBuilder {
                 ));
 
         return dutyCounts;
+    }
+
+    private Map<Long, Integer> getRecentDutyFatigueScores(
+            List<Long> userIds,
+            LocalDate startDate,
+            LocalDate endDate
+    ) {
+        Map<Long, Integer> fatigueScores = new HashMap<>();
+        List<DutyAssignment> assignments = entityManager.createQuery("""
+                        select d
+                        from DutyAssignment d
+                        join fetch d.user u
+                        where u.id in :userIds
+                          and d.dutyDate between :startDate and :endDate
+                          and d.status = :status
+                        """, DutyAssignment.class)
+                .setParameter("userIds", userIds)
+                .setParameter("startDate", startDate)
+                .setParameter("endDate", endDate)
+                .setParameter("status", DutyStatus.APPROVED)
+                .getResultList();
+
+        for (DutyAssignment assignment : assignments) {
+            fatigueScores.merge(
+                    assignment.getUser().getId(),
+                    dutyFatigueCalculator.calculate(assignment.getStartTime(), assignment.getEndTime()),
+                    Integer::sum
+            );
+        }
+
+        return fatigueScores;
     }
 
     private UnitBlock toUnitBlock(Unit unit) {

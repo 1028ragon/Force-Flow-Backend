@@ -7,6 +7,7 @@ public record SoldierBlock(
         String role,
         String currentStatus,
         Integer recentDutyCount,
+        Integer recentDutyFatigueScore,
         Boolean workedYesterday,
         Boolean hasScheduleConflict,
         Boolean eligible
