@@ -98,13 +98,13 @@ Response:
 ## 2. 부대 근무 초기설정 조회
 
 ```http
-GET /api/work-schedules/units/{unitId}/setting
+GET /api/work-schedules/units/{unitId}/setting?dutyType={dutyType}
 ```
 
 예시:
 
 ```http
-GET /api/work-schedules/units/2/setting
+GET /api/work-schedules/units/2/setting?dutyType=불침번
 ```
 
 Response:
@@ -130,8 +130,8 @@ Response:
 
 주의:
 
-- 현재 조회 API는 `unitId` 기준 대표 설정을 조회한다.
-- 여러 근무 종류를 저장할 수 있지만, 다중 설정 조회 API는 아직 별도로 없다.
+- 설정 조회는 `unitId + dutyType` 기준으로 단건 조회한다.
+- 같은 부대에 `불침번`, `위병소 근무`처럼 여러 설정이 있어도 `dutyType`으로 구분한다.
 
 ## 3. AI 미리보기 생성
 

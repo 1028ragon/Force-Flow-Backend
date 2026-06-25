@@ -25,8 +25,8 @@ public class WorkScheduleUnitSettingServiceImpl implements WorkScheduleUnitSetti
 
     @Override
     @Transactional(readOnly = true)
-    public WorkScheduleUnitSettingResponse getSetting(Long unitId) {
-        WorkScheduleSetting setting = workScheduleSettingRepository.findByUnitId(unitId)
+    public WorkScheduleUnitSettingResponse getSetting(Long unitId, String dutyType) {
+        WorkScheduleSetting setting = workScheduleSettingRepository.findByUnitIdAndDutyType(unitId, dutyType)
                 .orElseThrow(() -> new IllegalArgumentException("부대 근무 설정을 찾을 수 없습니다."));
 
         return toResponse(setting);

@@ -30,7 +30,7 @@
 - `POST /api/work-schedules/confirm`
 - `GET /api/work-schedules/candidates?unitId={unitId}&dutyDate={yyyy-MM-dd}&dutyType={dutyType}&slotOrder={slotOrder}&keyword={keyword}`
 - `GET /api/work-schedules?unitId={unitId}&dutyDate={yyyy-MM-dd}`
-- `GET /api/work-schedules/units/{unitId}/setting`
+- `GET /api/work-schedules/units/{unitId}/setting?dutyType={dutyType}`
 - `PUT /api/work-schedules/units/{unitId}/setting`
 
 Preview 요청 예시:
@@ -279,7 +279,7 @@ VALUES (
 프론트 연동용 설정 API 예시:
 
 ```http
-GET http://localhost:8080/api/work-schedules/units/2/setting
+GET http://localhost:8080/api/work-schedules/units/2/setting?dutyType=불침번
 ```
 
 ```http

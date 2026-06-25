@@ -3,8 +3,6 @@ package ForceFlow.Military.workSchedule.service;
 import ForceFlow.Military.dto.responseDto.AiModelResponse;
 import ForceFlow.Military.workSchedule.dto.internal.AiInternalRequest;
 import ForceFlow.Military.workSchedule.exception.OpenAiScheduleClientException;
-import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
-import com.fasterxml.jackson.annotation.JsonProperty;
 import java.io.IOException;
 import java.net.URI;
 import java.net.http.HttpClient;
@@ -15,6 +13,7 @@ import java.time.Duration;
 import java.util.List;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
+import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 
 @Service
@@ -95,17 +94,18 @@ public class OpenAiScheduleClient {
     }
 
     private String extractContent(String responseBody) throws Exception {
-        OpenAiChatResponse response = objectMapper.readValue(responseBody, OpenAiChatResponse.class);
-        if (response.choices() == null || response.choices().isEmpty()) {
+        // 필요한 content 필드만 읽어 OpenAI 응답에 다른 필드가 추가되어도 파싱에 영향이 없게 한다.
+        JsonNode choices = objectMapper.readTree(responseBody).path("choices");
+        if (!choices.isArray() || choices.isEmpty()) {
             throw new OpenAiScheduleClientException("OpenAI 응답에 choices가 없습니다.");
         }
 
-        OpenAiMessage message = response.choices().get(0).message();
-        if (message == null || message.content() == null || message.content().isBlank()) {
+        String content = choices.path(0).path("message").path("content").asText("");
+        if (content.isBlank()) {
             throw new OpenAiScheduleClientException("OpenAI 응답 content가 비어 있습니다.");
         }
 
-        return message.content();
+        return content;
     }
 
     private String normalizeJsonContent(String content) {
@@ -141,7 +141,8 @@ public class OpenAiScheduleClient {
             String model,
             List<OpenAiMessage> messages,
             Double temperature,
-            @JsonProperty("response_format") OpenAiResponseFormat responseFormat
+            // Jackson annotation 패키지에 의존하지 않고 OpenAI API 필드명 response_format을 그대로 유지한다.
+            OpenAiResponseFormat response_format
     ) {
     }
 
@@ -153,18 +154,6 @@ public class OpenAiScheduleClient {
 
     private record OpenAiResponseFormat(
             String type
-    ) {
-    }
-
-    @JsonIgnoreProperties(ignoreUnknown = true)
-    private record OpenAiChatResponse(
-            List<OpenAiChoice> choices
-    ) {
-    }
-
-    @JsonIgnoreProperties(ignoreUnknown = true)
-    private record OpenAiChoice(
-            OpenAiMessage message
     ) {
     }
 }

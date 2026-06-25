@@ -10,6 +10,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
@@ -20,8 +21,11 @@ public class WorkScheduleUnitSettingController {
     private final WorkScheduleUnitSettingService workScheduleUnitSettingService;
 
     @GetMapping
-    public WorkScheduleUnitSettingResponse getSetting(@PathVariable Long unitId) {
-        return workScheduleUnitSettingService.getSetting(unitId);
+    public WorkScheduleUnitSettingResponse getSetting(
+            @PathVariable Long unitId,
+            @RequestParam String dutyType
+    ) {
+        return workScheduleUnitSettingService.getSetting(unitId, dutyType);
     }
 
     @PutMapping

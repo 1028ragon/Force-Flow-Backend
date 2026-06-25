@@ -118,7 +118,7 @@ Content-Type: application/json
 ### Request
 
 ```http
-GET http://localhost:8080/api/work-schedules/units/2/setting
+GET http://localhost:8080/api/work-schedules/units/2/setting?dutyType=불침번
 ```
 
 ### Response 확인
