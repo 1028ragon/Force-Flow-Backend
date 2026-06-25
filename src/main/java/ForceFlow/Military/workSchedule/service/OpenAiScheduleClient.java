@@ -130,6 +130,7 @@ public class OpenAiScheduleClient {
                 soldiers 배열에서 eligible이 true인 인원만 추천하세요.
                 duty.requiredCount와 정확히 같은 수의 인원을 추천하세요.
                 duty.timeSlots의 각 시간대마다 allowedRoles에 포함되는 병사 중 requiredCount명만큼 추천하세요.
+                같은 시간대(timeSlot)에 이병(rankName이 '이병')은 1명만 배정하세요.
                 공정성 우선순위는 recentDutyCount가 낮은 인원, workedYesterday가 false인 인원,
                 hasScheduleConflict가 false인 인원, 제외 상태가 아닌 인원입니다.
                 각 reason은 간결한 한국어 문장으로 작성하세요.

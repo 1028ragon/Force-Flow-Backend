@@ -15,6 +15,7 @@ import org.springframework.stereotype.Component;
 @Component
 public class AiRecommendationValidator {
 
+    // AI 추천 결과는 그대로 저장하지 않고, 백엔드 기준으로 최소 유효성을 먼저 검증한다.
     public void validate(AiInternalRequest request, AiModelResponse response) {
         if (response == null) {
             throw new InvalidAiRecommendationException("AI 추천 응답이 비어 있습니다.");

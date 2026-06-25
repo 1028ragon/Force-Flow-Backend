@@ -47,6 +47,8 @@ import tools.jackson.databind.ObjectMapper;
 @RequiredArgsConstructor
 public class AiRecommendationServiceImpl implements AiRecommendationService {
 
+    private static final String PRIVATE_RANK_NAME = "이병";
+
     private final AiInternalRequestBuilder aiInternalRequestBuilder;
     private final OpenAiScheduleClient openAiScheduleClient;
     private final AiRecommendationValidator aiRecommendationValidator;
@@ -64,6 +66,7 @@ public class AiRecommendationServiceImpl implements AiRecommendationService {
     public WorkSchedulePreviewResponse previewSchedule(AiRecommendationCreateRequest request) {
         AiInternalRequest internalRequest = aiInternalRequestBuilder.build(request);
         AiModelResponse aiResponse = openAiScheduleClient.recommend(internalRequest);
+        // AI는 추천만 생성하므로, 백엔드에서 추천 인원 수/중복/부적격 병사 여부를 검증한다.
         aiRecommendationValidator.validate(internalRequest, aiResponse);
         String requestJson = writeJson(internalRequest);
         String responseJson = writeJson(aiResponse);
@@ -88,10 +91,12 @@ public class AiRecommendationServiceImpl implements AiRecommendationService {
                         request.dutyType()
                 )
                 .orElseThrow(() -> new IllegalArgumentException("부대 근무 설정을 찾을 수 없습니다."));
+        // 프론트에서 preview 인원을 수정할 수 있으므로, confirm 단계에서 최종 근무 규칙을 다시 검증한다.
         validateConfirmRequest(request, setting);
 
         Map<Long, User> usersById = getUsersById(request);
         Set<Long> allowedUnitIds = new HashSet<>(unitRepository.findAllSubUnitIds(request.unitId()));
+        // 확정 저장 전 부대 소속, 제외 상태, 일정 충돌, 중복 근무, 시간대별 허용 역할을 강제 검증한다.
         validateConfirmAssignments(request, setting, usersById, allowedUnitIds);
 
         AiRecommendation aiRecommendation = resolveAiRecommendation(request, unit);
@@ -244,19 +249,26 @@ public class AiRecommendationServiceImpl implements AiRecommendationService {
                 .collect(Collectors.toMap(SoldierBlock::userId, Function.identity()));
         List<PreviewSlot> slots = expandPreviewSlots(internalRequest);
         List<AiRecommendedUser> remainingUsers = new ArrayList<>(recommendedUsers);
+        Map<SlotKey, Integer> privateRankCounts = new java.util.HashMap<>();
 
         List<WorkSchedulePreviewAssignmentResponse> assignments = new ArrayList<>();
         for (PreviewSlot slot : slots) {
+            SlotKey slotKey = SlotKey.from(slot);
             AiRecommendedUser recommendedUser = findAndRemoveRecommendedUserByAllowedRoles(
                     remainingUsers,
                     soldiersByUserId,
-                    slot.allowedRoles()
+                    slot.allowedRoles(),
+                    privateRankCounts.getOrDefault(slotKey, 0) > 0
             );
+            SoldierBlock soldier = soldiersByUserId.get(recommendedUser.userId());
+            if (isPrivateRank(soldier.rankName())) {
+                privateRankCounts.merge(slotKey, 1, Integer::sum);
+            }
             assignments.add(toPreviewAssignment(
                         internalRequest,
                         slot,
                         recommendedUser,
-                        soldiersByUserId.get(recommendedUser.userId())
+                        soldier
             ));
         }
         return assignments;
@@ -287,16 +299,28 @@ public class AiRecommendationServiceImpl implements AiRecommendationService {
     private AiRecommendedUser findAndRemoveRecommendedUserByAllowedRoles(
             List<AiRecommendedUser> recommendedUsers,
             Map<Long, SoldierBlock> soldiersByUserId,
-            List<String> allowedRoles
+            List<String> allowedRoles,
+            boolean privateRankAlreadyAssigned
     ) {
+        boolean blockedByPrivateRankRule = false;
         for (int index = 0; index < recommendedUsers.size(); index++) {
             AiRecommendedUser recommendedUser = recommendedUsers.get(index);
             SoldierBlock soldier = soldiersByUserId.get(recommendedUser.userId());
-            if (soldier != null && allowedRoles.contains(soldier.role())) {
+            if (soldier == null || !allowedRoles.contains(soldier.role())) {
+                continue;
+            }
+            if (privateRankAlreadyAssigned && isPrivateRank(soldier.rankName())) {
+                blockedByPrivateRankRule = true;
+                continue;
+            }
+            if (soldier != null) {
                 return recommendedUsers.remove(index);
             }
         }
 
+        if (blockedByPrivateRankRule) {
+            throw new IllegalArgumentException("AI 추천 결과가 같은 시간대에 이병을 2명 이상 배정했습니다.");
+        }
         throw new IllegalArgumentException("AI 추천 결과가 시간대별 허용 역할과 일치하지 않습니다.");
     }
 
@@ -349,6 +373,7 @@ public class AiRecommendationServiceImpl implements AiRecommendationService {
         Set<Long> seenUserIds = new HashSet<>();
         Map<SlotKey, SlotRequirement> slotRequirements = getSlotRequirements(setting);
         Map<SlotKey, Integer> assignedCounts = new java.util.HashMap<>();
+        Map<SlotKey, Integer> privateRankCounts = new java.util.HashMap<>();
 
         for (WorkScheduleConfirmAssignmentRequest assignment : request.assignments()) {
             User user = usersById.get(assignment.userId());
@@ -365,6 +390,12 @@ public class AiRecommendationServiceImpl implements AiRecommendationService {
             SlotRequirement requirement = slotRequirements.get(key);
             if (requirement == null || !requirement.allowedRoles().contains(user.getRole())) {
                 throw new IllegalArgumentException("승인 배정의 시간대별 허용 역할이 부대 근무 설정과 일치하지 않습니다.");
+            }
+            if (isPrivateRank(user.getRankName())) {
+                int privateRankCount = privateRankCounts.merge(key, 1, Integer::sum);
+                if (privateRankCount > 1) {
+                    throw new IllegalArgumentException("같은 시간대에 이병끼리 배정할 수 없습니다.");
+                }
             }
             assignedCounts.merge(key, 1, Integer::sum);
         }
@@ -404,6 +435,7 @@ public class AiRecommendationServiceImpl implements AiRecommendationService {
             Set<String> excludedStatuses,
             Set<Long> seenUserIds
     ) {
+        // AI 추천 또는 프론트 수정 결과가 실제 저장 가능한 병사인지 한 명씩 최종 검증한다.
         if (!seenUserIds.add(assignment.userId())) {
             throw new IllegalArgumentException("동일 병사가 중복 배정되었습니다.");
         }
@@ -623,6 +655,10 @@ public class AiRecommendationServiceImpl implements AiRecommendationService {
         return value == null || value.isBlank();
     }
 
+    private boolean isPrivateRank(String rankName) {
+        return PRIVATE_RANK_NAME.equals(rankName);
+    }
+
     private record SlotKey(
             Integer slotOrder,
             java.time.LocalTime startTime,
@@ -634,6 +670,14 @@ public class AiRecommendationServiceImpl implements AiRecommendationService {
                     assignment.slotOrder(),
                     assignment.startTime(),
                     assignment.endTime()
+            );
+        }
+
+        static SlotKey from(PreviewSlot slot) {
+            return new SlotKey(
+                    slot.slotOrder(),
+                    slot.startTime(),
+                    slot.endTime()
             );
         }
     }
