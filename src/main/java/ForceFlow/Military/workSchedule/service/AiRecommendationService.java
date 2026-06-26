@@ -1,6 +1,7 @@
 package ForceFlow.Military.workSchedule.service;
 
 import ForceFlow.Military.workSchedule.dto.WorkScheduleConfirmRequest;
+import ForceFlow.Military.workSchedule.dto.WorkScheduleUserDutyResponse;
 import ForceFlow.Military.workSchedule.dto.WorkScheduleDailyResponse;
 import ForceFlow.Military.workSchedule.dto.WorkSchedulePreviewResponse;
 import ForceFlow.Military.dto.requestDto.AiRecommendationCreateRequest;
@@ -14,4 +15,6 @@ public interface AiRecommendationService {
     AiRecommendationResponse confirmSchedule(WorkScheduleConfirmRequest request);
 
     WorkScheduleDailyResponse getDailySchedule(Long unitId, LocalDate dutyDate, String dutyType);
+
+    WorkScheduleUserDutyResponse getAssignmentByUserAndDate(Long userId, LocalDate dutyDate);
 }

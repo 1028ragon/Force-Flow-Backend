@@ -3,6 +3,7 @@ package ForceFlow.Military.workSchedule.controller;
 import ForceFlow.Military.dto.requestDto.AiRecommendationCreateRequest;
 import ForceFlow.Military.dto.requestDto.AiRecommendationResponse;
 import ForceFlow.Military.workSchedule.dto.WorkScheduleCandidateSearchResponse;
+import ForceFlow.Military.workSchedule.dto.WorkScheduleUserDutyResponse;
 import ForceFlow.Military.workSchedule.dto.WorkScheduleConfirmRequest;
 import ForceFlow.Military.workSchedule.dto.WorkScheduleDailyResponse;
 import ForceFlow.Military.workSchedule.dto.WorkSchedulePreviewResponse;
@@ -13,6 +14,7 @@ import lombok.RequiredArgsConstructor;
 import java.time.LocalDate;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -65,5 +67,13 @@ public class AiRecommendationController {
             @Valid @RequestBody WorkScheduleConfirmRequest request
     ) {
         return aiRecommendationService.confirmSchedule(request);
+    }
+
+    @GetMapping("/users/{userId}")
+    public WorkScheduleUserDutyResponse getAssignmentByUserAndDate(
+            @PathVariable Long userId,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate dutyDate
+    ) {
+        return aiRecommendationService.getAssignmentByUserAndDate(userId, dutyDate);
     }
 }

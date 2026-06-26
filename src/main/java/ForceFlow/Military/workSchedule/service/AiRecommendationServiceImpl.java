@@ -19,6 +19,7 @@ import ForceFlow.Military.workSchedule.dto.WorkScheduleConfirmAssignmentRequest;
 import ForceFlow.Military.workSchedule.dto.WorkScheduleConfirmRequest;
 import ForceFlow.Military.workSchedule.dto.WorkScheduleAssignmentResponse;
 import ForceFlow.Military.workSchedule.dto.WorkScheduleDailyResponse;
+import ForceFlow.Military.workSchedule.dto.WorkScheduleUserDutyResponse;
 import ForceFlow.Military.workSchedule.dto.WorkSchedulePreviewAssignmentResponse;
 import ForceFlow.Military.workSchedule.dto.WorkSchedulePreviewResponse;
 import ForceFlow.Military.workSchedule.dto.internal.AiInternalRequest;
@@ -112,6 +113,47 @@ public class AiRecommendationServiceImpl implements AiRecommendationService {
         List<DutyAssignment> savedAssignments = dutyAssignmentRepository.saveAll(assignments);
 
         return toAiRecommendationResponse(aiRecommendation, savedAssignments);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public WorkScheduleUserDutyResponse getAssignmentByUserAndDate(Long userId, LocalDate dutyDate) {
+        if (!userRepository.existsById(userId)) {
+            throw new IllegalArgumentException("병사를 찾을 수 없습니다.");
+        }
+
+        String query = """
+                select d
+                from DutyAssignment d
+                join fetch d.user u
+                join fetch d.unit unit
+                where d.user.id = :userId
+                  and d.dutyDate = :dutyDate
+                  and d.status = :status
+                order by d.id desc
+                """;
+
+        return entityManager.createQuery(query, DutyAssignment.class)
+                .setParameter("userId", userId)
+                .setParameter("dutyDate", dutyDate)
+                .setParameter("status", DutyStatus.APPROVED)
+                .setMaxResults(1)
+                .getResultStream()
+                .findFirst()
+                .map(d -> new WorkScheduleUserDutyResponse(
+                        d.getId(),
+                        d.getUser().getId(),
+                        d.getUnit().getId(),
+                        d.getUser().getName(),
+                        d.getUser().getRankName(),
+                        d.getUser().getRole(),
+                        d.getDutyDate(),
+                        d.getDutyType(),
+                        d.getStartTime(),
+                        d.getEndTime(),
+                        d.getStatus()
+                ))
+                .orElseThrow(() -> new IllegalArgumentException("해당 날짜에 승인된 근무가 없습니다."));
     }
 
     @Override
