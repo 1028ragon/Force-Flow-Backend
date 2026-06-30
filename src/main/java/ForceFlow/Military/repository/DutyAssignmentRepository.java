@@ -10,6 +10,13 @@ import java.util.List;
 
 public interface DutyAssignmentRepository extends JpaRepository<DutyAssignment, Long> {
 
+    interface UserDutyCount {
+
+        Long getUserId();
+
+        Long getDutyCount();
+    }
+
     List<DutyAssignment> findByUserId(Long userId);
 
     List<DutyAssignment> findByUnitId(Long unitId);
@@ -47,6 +54,22 @@ public interface DutyAssignmentRepository extends JpaRepository<DutyAssignment, 
             LocalDate startDate,
             LocalDate endDate,
             String status
+    );
+
+    @Query("""
+            select d.user.id as userId,
+                   count(d.id) as dutyCount
+            from DutyAssignment d
+            where d.user.id in :userIds
+              and d.dutyDate between :startDate and :endDate
+              and d.status = :status
+            group by d.user.id
+            """)
+    List<UserDutyCount> countDutiesByUserIdsAndDateBetweenAndStatus(
+            @Param("userIds") List<Long> userIds,
+            @Param("startDate") LocalDate startDate,
+            @Param("endDate") LocalDate endDate,
+            @Param("status") String status
     );
 
     @Query("""

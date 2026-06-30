@@ -21,6 +21,16 @@ public interface UserRepository extends JpaRepository<User, Long> {
             String currentStatus
     );
 
+    List<User> findByUnitIdAndRole(
+            Long unitId,
+            String role
+    );
+
+    List<User> findByUnitIdInAndRole(
+            List<Long> unitIds,
+            String role
+    );
+
     boolean existsByServiceNumber(String serviceNumber);
 
     long countByUnitId(Long unitId);
