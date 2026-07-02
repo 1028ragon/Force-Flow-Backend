@@ -1,237 +1,267 @@
-# Git Convention
+# ForceFlow
 
-이 문서는 팀 프로젝트에서 Git을 사용할 때 지켜야 할 브랜치, 커밋, PR 규칙을 정리한 문서입니다.
+> **AI 기반 군 병력 및 근무 관리 시스템**
+
+ForceFlow는 부대 내 병력 관리, 일정 관리, 근무 편성을 하나의 시스템으로 통합하고,
+AI를 활용하여 공정한 근무 추천을 제공하는 군 전용 관리 플랫폼입니다.
 
 ---
 
-## 1. 브랜치 전략
+## 🔗 Demo
 
-### 기본 브랜치
+### Frontend
 
-| 브랜치명 | 설명 |
+https://force-flow-frontend.vercel.app/
+
+---
+
+## 🛠 Tech Stack
+
+### Backend
+
+| 항목 | 내용 |
 |---|---|
-| `main` | 최종 배포용 브랜치 |
-| `develop` | 개발 통합 브랜치 |
-| `feature/*` | 기능 개발 브랜치 |
-| `fix/*` | 버그 수정 브랜치 |
-| `hotfix/*` | 긴급 수정 브랜치 |
-| `refactor/*` | 리팩토링 브랜치 |
+| Language | Java 21 |
+| Framework | Spring Boot 4.1.0 |
+| ORM | Spring Data JPA / Hibernate |
+| Database | MySQL |
+| Build | Gradle |
+| Deploy | Railway |
 
----
+### Frontend
 
-## 2. 브랜치 이름 규칙
-
-브랜치명은 아래 형식을 사용합니다.
-
-```bash
-타입/작업내용
-```
-
-### 예시
-
-```bash
-feature/login
-feature/post-crud
-feature/jwt-auth
-fix/login-error
-refactor/post-service
-```
-
----
-
-## 3. 커밋 메시지 규칙
-
-커밋 메시지는 아래 형식을 사용합니다.
-
-```bash
-타입: 작업 내용
-```
-
-### 커밋 타입
-
-| 타입 | 설명 |
+| 항목 | 내용 |
 |---|---|
-| `feat` | 새로운 기능 추가 |
-| `fix` | 버그 수정 |
-| `docs` | 문서 수정 |
-| `style` | 코드 포맷팅, 세미콜론 등 기능 변경 없는 수정 |
-| `refactor` | 코드 리팩토링 |
-| `test` | 테스트 코드 추가 또는 수정 |
-| `chore` | 빌드, 설정 파일, 패키지 수정 |
-| `rename` | 파일명 또는 폴더명 변경 |
-| `remove` | 파일 삭제 |
+| Framework | React |
+| Styling | CSS |
+| Deploy | Vercel |
 
-### 커밋 예시
+### AI
 
-```bash
-feat: 회원가입 기능 추가
-feat: JWT 로그인 기능 구현
-fix: 로그인 실패 시 403 오류 수정
-docs: README 깃 컨벤션 추가
-refactor: 게시글 서비스 로직 정리
-chore: application.yml 설정 수정
+| 항목 | 내용 |
+|---|---|
+| API | OpenAI API |
+| 활용 | 근무 후보 병사 공정 추천 |
+
+---
+
+## 🗄 ERD
+
+<p align="center">
+  <img src="images/ERD.png" alt="ERD" width="900">
+</p>
+
+### 주요 테이블
+
+| 테이블 | 설명 |
+|---|---|
+| `unit` | 부대 (대대 → 중대 → 소대 → 분대 계층 구조) |
+| `users` | 병사 정보 (계급, 역할, 현재 상태) |
+| `unit_setting` | 부대별 근무 기본 설정 |
+| `schedule` | 병사 개인 일정 (훈련, 교육 등) |
+| `work_schedule_setting` | 근무 종류별 슬롯 설정 |
+| `work_schedule_time_slot` | 시간대별 슬롯 (초번 분할) |
+| `ai_recommendation` | AI 추천 기록 |
+| `duty_assignment` | 확정 근무 배정 |
+
+---
+
+## ✨ 주요 기능
+
+### 👨‍✈️ 병사 관리
+
+- 병사 등록 / 조회
+- 현재 상태 변경 (`부대내`, `휴가`, `외출`, `외박`, `교육`, `훈련`, `입원`, `외진`)
+
+### 📅 일정 관리
+
+- 병사 개인 일정 등록 / 조회
+- 일정 충돌 자동 감지 (근무 배정 시 반영)
+
+### ⚙️ 근무 설정
+
+- 근무 종류별 시간대 슬롯 설정 (불침번, 위병소 근무 등)
+- 슬롯별 필요 인원 및 허용 역할 설정
+- 제외 상태 설정
+- 최근 근무 조회 기간 설정 (`lookbackDays`)
+- 연속 근무 방지 설정 (`preventConsecutive`)
+- 최대 근무 횟수 제한 (`maxDutyCount`)
+
+### 🤖 AI 근무 추천
+
+- 슬롯 설정 기반 근무 가능 병사 자동 필터링
+- OpenAI를 이용한 공정 근무 추천 생성
+- 피로도 점수 기반 공정성 보장
+- 추천 미리보기 → 병사 수정 → 승인 확정 플로우
+
+---
+
+## 📐 AI 공정성 알고리즘
+
+근무 추천 시 `recentDutyCount` (최근 근무 횟수)와 `recentDutyFatigueScore` (피로도 점수)를 함께 고려합니다.
+
+### 피로도 점수 기준
+
+| 시간대 | 점수 |
+|---|---|
+| 00:00 ~ 06:00 포함 | 4점 |
+| 22:00 ~ 24:00 포함 | 3점 |
+| 18:00 ~ 22:00 포함 | 2점 |
+| 그 외 주간 | 1점 |
+
+- 피로도 점수가 낮은 병사를 우선 추천합니다.
+- 같은 시간대(슬롯)에 이병은 최대 1명만 배정됩니다.
+- Entity 추가 없이 기존 확정 근무 이력의 `startTime`, `endTime` 기준으로 계산합니다.
+
+---
+
+## 📱 UI
+
+### 메인 화면
+
+<p align="center">
+  <img src="images/web/officerMain.png" alt="메인 화면" width="900">
+</p>
+
+### 대시보드
+
+<p align="center">
+  <img src="images/web/officerDashboard.png" alt="대시보드" width="900">
+</p>
+
+### AI 근무편성 초기설정
+
+<p align="center">
+  <img src="images/web/officerSchedule.png" alt="근무 일정" width="900">
+</p>
+
+### AI 근무편성 추천 미리보기
+
+<p align="center">
+  <img src="images/web/officerPreview.png" alt="AI 추천 미리보기" width="900">
+</p>
+
+
+### 가용 가능 인원 자동 조회
+
+<p align="center">
+  <img src="images/web/officerPersionalCheck.png" alt="병사 개인 확인" width="900">
+</p>
+
+---
+
+## 📂 Project Structure
+
+```text
+src/main/java/ForceFlow/Military
+├── unit/                    # 부대 관리
+│   ├── UnitController.java
+│   ├── UnitService.java
+│   ├── UnitSettingController.java
+│   └── UnitSettingService.java
+├── user/                    # 병사 관리
+│   ├── UserController.java
+│   ├── UserService.java
+│   ├── UserStatusService.java
+│   ├── AvailableUserController.java
+│   └── DutyCandidateController.java
+├── schedule/                # 일정 관리
+│   ├── ScheduleController.java
+│   └── ScheduleService.java
+├── workSchedule/            # 근무표 관리 (AI 추천 포함)
+│   ├── controller/
+│   │   ├── AiRecommendationController.java
+│   │   ├── WorkScheduleUnitSettingController.java
+│   │   └── WorkScheduleExceptionHandler.java
+│   ├── dto/
+│   └── constant/
+├── service/                 # 공통 서비스
+│   ├── DutyCandidateQueryService.java
+│   └── DutyCandidateQueryServiceImpl.java
+├── entity/                  # JPA 엔티티
+│   ├── Unit.java
+│   ├── User.java
+│   ├── UnitSetting.java
+│   ├── Schedule.java
+│   ├── AiRecommendation.java
+│   └── DutyAssignment.java
+├── repository/              # JPA 레포지토리
+└── dto/                     # 공통 DTO
+    ├── requestDto/
+    └── responseDto/
 ```
 
 ---
 
-## 4. 커밋 작성 규칙
+## 🔄 Service Flow
 
-- 커밋 메시지는 한글 또는 영어로 작성할 수 있습니다.
-- 한 커밋에는 하나의 작업만 포함합니다.
-- 의미 없는 커밋 메시지는 사용하지 않습니다.
-
-### 좋지 않은 예시
-
-```bash
-수정
-업데이트
-버그 고침
-작업함
-```
-
-### 좋은 예시
-
-```bash
-fix: 회원가입 중복 아이디 예외 처리 추가
-feat: 게시글 삭제 API 구현
-docs: API 명세 문서 추가
-```
-
----
-
-## 5. 작업 흐름
-
-### 1. 최신 develop 브랜치 가져오기
-
-```bash
-git checkout develop
-git pull origin develop
-```
-
-### 2. 기능 브랜치 생성
-
-```bash
-git checkout -b feature/작업내용
-```
-
-예시:
-
-```bash
-git checkout -b feature/jwt-auth
-```
-
-### 3. 작업 후 커밋
-
-```bash
-git add .
-git commit -m "feat: JWT 인증 기능 추가"
-```
-
-### 4. 원격 저장소에 브랜치 올리기
-
-```bash
-git push origin feature/jwt-auth
-```
-
-### 5. Pull Request 생성
-
-GitHub에서 `feature/*` 브랜치를 `develop` 브랜치로 Pull Request를 생성합니다.
-
----
-
-## 6. Pull Request 규칙
-
-PR 제목은 아래 형식을 사용합니다.
-
-```bash
-[타입] 작업 내용
-```
-
-### PR 제목 예시
-
-```bash
-[feat] JWT 인증 기능 구현
-[fix] 로그인 오류 수정
-[docs] README 수정
-```
-
-### PR 내용에 포함할 것
-
-```markdown
-## 작업 내용
-- 
-
-## 변경 사항
-- 
-
-## 테스트 내용
-- 
-
-## 참고 사항
--
+```text
+근무 설정 저장 (PUT /api/work-schedules/units/{unitId}/setting)
+      │
+      ▼
+AI 미리보기 요청 (POST /api/work-schedules/preview)
+      │  └─ 부대 하위 병사 전체 조회
+      │  └─ 피로도 점수 / 근무 횟수 계산
+      │  └─ OpenAI 추천 생성
+      │  └─ ai_recommendation 기록 저장
+      ▼
+미리보기 확인 및 병사 수정 (필요 시 GET /api/work-schedules/candidates 로 후보 검색)
+      │
+      ▼
+승인 확정 (POST /api/work-schedules/confirm)
+      │  └─ 역할 / 슬롯 / 중복 / 연속 근무 / 이병 제한 검증
+      │  └─ duty_assignment 저장
+      ▼
+날짜별 근무표 조회 (GET /api/work-schedules)
 ```
 
 ---
 
-## 7. Merge 규칙
+## 🌐 API 목록
 
-- `main` 브랜치에 직접 push하지 않습니다.
-- 기능 개발은 반드시 `feature/*` 브랜치에서 진행합니다.
-- PR은 팀원 리뷰 후 merge합니다.
-- 충돌이 발생하면 작업자가 직접 해결합니다.
+| Method | Endpoint | 설명 |
+|---|---|---|
+| `PUT` | `/api/work-schedules/units/{unitId}/setting` | 부대 근무 초기설정 저장 |
+| `GET` | `/api/work-schedules/units/{unitId}/setting` | 부대 근무 초기설정 조회 |
+| `POST` | `/api/work-schedules/preview` | AI 근무 추천 미리보기 생성 |
+| `POST` | `/api/work-schedules/confirm` | 미리보기 승인 확정 |
+| `GET` | `/api/work-schedules/candidates` | 근무 후보 병사 검색 |
+| `GET` | `/api/work-schedules` | 날짜별 확정 근무표 조회 |
 
----
-
-## 8. 협업 시 주의사항
-
-- 작업 시작 전 항상 `develop` 브랜치를 최신 상태로 맞춥니다.
-- 같은 파일을 동시에 수정할 경우 미리 팀원과 공유합니다.
-- 큰 기능은 작은 단위로 나누어 커밋합니다.
-- 커밋 메시지만 봐도 어떤 작업을 했는지 알 수 있게 작성합니다.
+> 상세 API 명세는 [`src/main/java/ForceFlow/Military/workSchedule/WORK_SCHEDULE_API_SPEC.md`](src/main/java/ForceFlow/Military/workSchedule/WORK_SCHEDULE_API_SPEC.md) 참고
 
 ---
 
-## 9. 자주 사용하는 명령어
+## 🚀 실행 방법
+
+### 1. 저장소 클론
 
 ```bash
-# 현재 브랜치 확인
-git branch
-
-# 변경 파일 확인
-git status
-
-# 브랜치 이동
-git checkout 브랜치명
-
-# 새 브랜치 생성 및 이동
-git checkout -b 브랜치명
-
-# 변경 파일 스테이징
-git add .
-
-# 커밋
-git commit -m "타입: 작업 내용"
-
-# 원격 저장소에 push
-git push origin 브랜치명
-
-# 최신 코드 가져오기
-git pull origin develop
+git clone https://github.com/Hackathon-Force-Flow/ForceFlow-Backend.git
+cd ForceFlow-Backend
 ```
+
+### 2. 환경 변수 설정
+
+`application.properties` 또는 `.env` 파일에 아래 항목을 설정합니다.
+
+```properties
+spring.datasource.url=jdbc:mysql://localhost:3306/military_db
+spring.datasource.username=your_username
+spring.datasource.password=your_password
+OPENAI_API_KEY=your_openai_api_key
+```
+
+### 3. 서버 실행
+
+```bash
+./gradlew bootRun
+```
+
+서버 기본 주소: `http://localhost:8080`
 
 ---
 
-## 10. 예시 작업 시나리오
+## 📄 License
 
-```bash
-git checkout develop
-git pull origin develop
-git checkout -b feature/post-crud
-
-# 코드 작업 후
-git add .
-git commit -m "feat: 게시글 CRUD 기능 구현"
-git push origin feature/post-crud
-```
-
-이후 GitHub에서 Pull Request를 생성합니다.
+This project was developed for educational and hackathon purposes.
