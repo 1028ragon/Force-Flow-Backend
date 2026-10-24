@@ -7,14 +7,6 @@ AI를 활용하여 공정한 근무 추천을 제공하는 군 전용 관리 플
 
 ---
 
-## 🔗 Demo
-
-### Frontend
-
-https://force-flow-frontend.vercel.app/
-
----
-
 ## 🛠 Tech Stack
 
 ### Backend
